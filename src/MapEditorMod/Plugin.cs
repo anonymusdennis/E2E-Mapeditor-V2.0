@@ -3,6 +3,7 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using E2EApi.Editor;
 using E2EApi.Events;
+using E2EApi.Features;
 using E2EApi.UI;
 using UnityEngine;
 

@@ -63,13 +63,13 @@ is a native build on both. Full details with troubleshooting live in
 
 ### 1. Install BepInEx 5
 
-You need **BepInEx 5.4.21, x64**. Newer 5.4.23.x builds crash in the preloader
+You need **BepInEx 5.4.21**. Newer 5.4.23.x builds crash in the preloader
 on this game (MonoMod `NativeDetour` NullReferenceException) — stick to 5.4.21.
 
 Download from the
 [BepInEx releases page](https://github.com/BepInEx/BepInEx/releases/tag/v5.4.21):
 
-- Windows: `BepInEx_x64_5.4.21.0.zip`
+- Windows: `BepInEx_x86_5.4.21.0.zip` (the Windows game is 32-bit — **not** x64)
 - Linux / Steam Deck: `BepInEx_unix_5.4.21.0.zip`
 
 #### Windows
