@@ -962,7 +962,7 @@ function placeMarker(tile) {
   const sx = img.clientWidth / img.naturalWidth;
   const sy = img.clientHeight / img.naturalHeight;
   mark.style.left = ((1 + (tile.x + 0.5) * mapTileSize) * sx) + 'px';
-  mark.style.top = (img.clientHeight - (1 + (tile.y + 0.5) * mapTileSize) * sy) + 'px';
+  mark.style.top = ((1 + (tile.y + 0.5) * mapTileSize) * sy) + 'px';
   mark.style.display = 'block';
 }
 
@@ -973,7 +973,7 @@ async function mapClick(ev) {
   const px = (ev.clientX - r.left) * (img.naturalWidth / r.width);
   const py = (ev.clientY - r.top) * (img.naturalHeight / r.height);
   const tx = Math.max(0, Math.min(119, Math.floor((px - 1) / mapTileSize)));
-  const ty = Math.max(0, Math.min(119, Math.floor((img.naturalHeight - py - 1) / mapTileSize)));
+  const ty = Math.max(0, Math.min(119, Math.floor((py - 1) / mapTileSize)));
   await post(`/api/teleport?x=${tx}&y=${ty}&floor=${curFloor}`);
   refreshPlayer();
 }
