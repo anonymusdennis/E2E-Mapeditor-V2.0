@@ -246,7 +246,7 @@ namespace MapEditorMod.WebUi
         <button id='ts_save_block' onclick='saveAsCustomBlock()' disabled>⊕ Save as building block</button>
         <button id='ts_open_anim' onclick='openAnimEditorFromSelection()' disabled>🎬 Create animated tile</button>
         <button id='tool_tileerase' onclick='setTool(""tileerase"")'>✕ Erase modded tiles</button>
-        <button class='danger' onclick='confirm(""Do you really want to delete all custom tilesets?"") && post(""/api/tiles/clear"")'>Clear ALL modded tiles</button>
+        <button class='danger' onclick='confirm(""Remove every painted mod tile (static + animated) from this map?"") && post(""/api/tiles/clear"")'>Clear ALL modded tiles</button>
         <button class='danger' onclick='openAnimEditorEmpty()' title='Open animation editor'>🎬 Animate tileset</button>
       </div>
       <div style='overflow:auto;max-height:70vh;border:1px solid #3a3a4c;border-radius:8px'>
@@ -1516,7 +1516,7 @@ async function brushAnimBlock(i) {
   // serialize frames for the API: atlas:rx:ry:rw:rh;...
   const framesParam = def.frames.map(f => `${f.atlas}:${f.x}:${f.y}:${f.w}:${f.h}`).join(';');
   const r = await (await fetch(
-    `/api/tilesets/arm-animated?fps=${def.fps}&loop=${def.loop?1:0}&pingpong=${def.pingpong?1:0}&decor=${def.decor?1:0}&frames=${encodeURIComponent(framesParam)}`,
+    `/api/tilesets/arm-animated?name=${encodeURIComponent(def.name)}&fps=${def.fps}&loop=${def.loop?1:0}&pingpong=${def.pingpong?1:0}&decor=${def.decor?1:0}&frames=${encodeURIComponent(framesParam)}`,
     {method:'POST'}
   )).json();
   if (r.ok || r.msg) {

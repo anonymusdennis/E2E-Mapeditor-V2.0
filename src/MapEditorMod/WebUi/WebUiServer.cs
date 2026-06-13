@@ -361,7 +361,11 @@ namespace MapEditorMod.WebUi
                 }
                 if (method == "POST" && path == "/api/tiles/clear")
                 {
-                    MainThread.Run(() => ModTiles.Clear());
+                    MainThread.Run(() =>
+                    {
+                        ModTiles.Clear();
+                        AnimatedModTiles.Clear();
+                    });
                     body = Encoding.UTF8.GetBytes("{\"ok\":true}");
                     return 200;
                 }

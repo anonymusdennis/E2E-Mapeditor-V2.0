@@ -282,7 +282,9 @@ namespace MapEditorMod
             if (Placement.GetCursorTile(out x, out y))
             {
                 int layer = Grid.CurrentEditorLayer;
-                ModTiles.EraseAt(x, y, layer < 0 ? 1 : layer);
+                int l = layer < 0 ? 1 : layer;
+                ModTiles.EraseAt(x, y, l);
+                AnimatedModTiles.EraseAt(x, y, l);
             }
         }
 
