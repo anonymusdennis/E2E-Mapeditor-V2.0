@@ -24,6 +24,9 @@ namespace E2EApi.Features
         private static BaseLevelManager _builtFor;
         private static int _builtLayer = -1;
 
+        // Minimum rotation in degrees before we apply a pivot parent for rendering.
+        private const float RotationEpsilon = 0.001f;
+
         internal static void Tick()
         {
             var level = BaseLevelManager.GetInstance();
@@ -91,7 +94,7 @@ namespace E2EApi.Features
                     renderer.color = new Color(1f, 1f, 1f, 0.45f); // dim lower layers
                 }
 
-                if (Mathf.Abs(p.Rotation) > 0.001f)
+                if (Mathf.Abs(p.Rotation) > RotationEpsilon)
                 {
                     // Rotate the sprite around the stamp centre using a pivot parent.
                     float halfW = p.WTiles * tileSize * 0.5f;

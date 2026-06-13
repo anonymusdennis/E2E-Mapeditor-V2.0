@@ -64,7 +64,7 @@ namespace E2EApi.Features
                     return null;
                 }
                 p.Decor = parts[3] == "d";
-                // Detect optional trailing rotation token "rot:<value>" (backward-compat)
+                // Detect optional trailing rotation token "rot:<value>" (backward-compatible)
                 int atlasEnd = parts.Length;
                 if (atlasEnd > 8 && parts[atlasEnd - 1].StartsWith("rot:"))
                 {

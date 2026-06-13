@@ -37,8 +37,8 @@ namespace MapEditorMod
         public static IEnumerable<TileKey> All() => Selected;
 
         /// <summary>
-        /// Process input.  Returns true if this system consumed the event so
-        /// <see cref="EditorTools"/> should not handle it.
+        /// Process input for selection (Shift-drag, Ctrl-click, Esc to clear).
+        /// Call every editor frame from <see cref="EditorTools.Tick"/>.
         /// </summary>
         public static void Tick()
         {
@@ -153,6 +153,9 @@ namespace MapEditorMod
 
         private static void RebuildHighlights()
         {
+            // XOR the tile count in using a prime multiplier so that a selection
+            // change (count change) produces a different hash even when Version is
+            // unchanged (e.g. the user rotated a tile and the overlay rebuilt).
             int curVersion = ModTiles.Version ^ (Selected.Count * 397);
             if (curVersion == _highlightVersion) return;
             _highlightVersion = curVersion;
