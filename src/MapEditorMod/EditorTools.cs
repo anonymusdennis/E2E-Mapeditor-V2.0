@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using E2EApi.Editor;
 using E2EApi.Features;
 using UnityEngine;
@@ -13,6 +14,8 @@ namespace MapEditorMod
         LinkSwitch,
         PaintTile,
         EraseTile,
+        PaintAnimatedTile,
+        EraseAnimatedTile,
     }
 
     /// <summary>The atlas region currently armed for tile painting.</summary>
@@ -24,6 +27,22 @@ namespace MapEditorMod
 
         public int WTiles => (W + 31) / 32;
         public int HTiles => (H + 31) / 32;
+    }
+
+    /// <summary>Multi-frame animated stamp armed for <see cref="EditorToolMode.PaintAnimatedTile"/>.</summary>
+    internal class AnimatedTileStamp
+    {
+        public List<E2EApi.Features.AnimatedModTiles.AnimFrame> Frames;
+        public float Fps = 4f;
+        public bool Loop = true;
+        public bool PingPong;
+        public bool Decor;
+        public string Name = "";
+
+        public int WTiles => Frames != null && Frames.Count > 0
+            ? (Frames[0].Rw + 31) / 32 : 1;
+        public int HTiles => Frames != null && Frames.Count > 0
+            ? (Frames[0].Rh + 31) / 32 : 1;
     }
 
     /// <summary>
@@ -43,6 +62,9 @@ namespace MapEditorMod
 
         /// <summary>Stamp used by PaintTile (set from the web UI before arming).</summary>
         public static TileStamp Stamp;
+
+        /// <summary>Animated stamp used by PaintAnimatedTile.</summary>
+        public static AnimatedTileStamp AnimatedStamp;
 
         private const float RotationStep = 11.25f;
 
@@ -113,6 +135,12 @@ namespace MapEditorMod
                         : $"LMB stamps {Stamp.WTiles}x{Stamp.HTiles} tile(s) ({(Stamp.Decor ? "over" : "under")} characters){selHint}";
                 case EditorToolMode.EraseTile:
                     return "click modded tiles to remove them";
+                case EditorToolMode.PaintAnimatedTile:
+                    return AnimatedStamp == null
+                        ? "pick an animated tile from the building blocks first"
+                        : $"LMB places animated tile \"{AnimatedStamp.Name}\" {AnimatedStamp.WTiles}x{AnimatedStamp.HTiles} ({AnimatedStamp.Frames.Count} frames @ {AnimatedStamp.Fps:0.#} FPS){selHint}";
+                case EditorToolMode.EraseAnimatedTile:
+                    return "click animated tiles to remove them";
                 default:
                     return selHint.TrimStart();
             }
@@ -147,6 +175,14 @@ namespace MapEditorMod
                     UpdateBrushCursor(new Color(1f, 0.45f, 0.1f, 0.95f));
                     TickEraseTile();
                     break;
+                case EditorToolMode.PaintAnimatedTile:
+                    UpdateBrushCursor(new Color(0.5f, 0.8f, 1f, 0.95f));
+                    TickPaintAnimatedTile();
+                    break;
+                case EditorToolMode.EraseAnimatedTile:
+                    UpdateBrushCursor(new Color(1f, 0.6f, 0.1f, 0.95f));
+                    TickEraseAnimatedTile();
+                    break;
             }
         }
 
@@ -154,7 +190,8 @@ namespace MapEditorMod
         {
             // Selection input is only active when no exclusive tool is running,
             // so it does not interfere with electricity paint / link / etc.
-            if (Mode == EditorToolMode.None || Mode == EditorToolMode.PaintTile)
+            if (Mode == EditorToolMode.None || Mode == EditorToolMode.PaintTile ||
+                Mode == EditorToolMode.PaintAnimatedTile)
             {
                 TileSelector.Tick();
             }
@@ -246,6 +283,46 @@ namespace MapEditorMod
             {
                 int layer = Grid.CurrentEditorLayer;
                 ModTiles.EraseAt(x, y, layer < 0 ? 1 : layer);
+            }
+        }
+
+        private static int _lastAnimStampX = int.MinValue;
+        private static int _lastAnimStampY = int.MinValue;
+
+        private static void TickPaintAnimatedTile()
+        {
+            if (AnimatedStamp == null || !Input.GetMouseButton(0))
+            {
+                _lastAnimStampX = _lastAnimStampY = int.MinValue;
+                return;
+            }
+            int x, y;
+            if (!Placement.GetCursorTile(out x, out y)) return;
+            int w = AnimatedStamp.WTiles;
+            int h = AnimatedStamp.HTiles;
+            if (w > 1 || h > 1)
+            {
+                x = (x / w) * w;
+                y = (y / h) * h;
+            }
+            if (x == _lastAnimStampX && y == _lastAnimStampY) return;
+            _lastAnimStampX = x;
+            _lastAnimStampY = y;
+            int layer = Grid.CurrentEditorLayer;
+            AnimatedModTiles.Place(x, y, layer < 0 ? 1 : layer,
+                AnimatedStamp.Decor, AnimatedStamp.Fps,
+                AnimatedStamp.Loop, AnimatedStamp.PingPong,
+                AnimatedStamp.Frames);
+        }
+
+        private static void TickEraseAnimatedTile()
+        {
+            if (!Input.GetMouseButton(0)) return;
+            int x, y;
+            if (Placement.GetCursorTile(out x, out y))
+            {
+                int layer = Grid.CurrentEditorLayer;
+                AnimatedModTiles.EraseAt(x, y, layer < 0 ? 1 : layer);
             }
         }
 
