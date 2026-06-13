@@ -55,6 +55,7 @@ namespace MapEditorMod
             E2EApi.Features.ElectricFences.Initialise();
             E2EApi.Features.Triggers.Initialise();
             E2EApi.Features.ModTiles.Initialise();
+            E2EApi.Features.AnimatedModTiles.Initialise();
             E2EApi.Persistence.VanillaFallback.Initialise();
 
             GameEvents.LevelLoaded += () => Log.LogInfo("level loaded");
@@ -133,6 +134,7 @@ namespace MapEditorMod
             {
                 EditorTools.Tick();
             }
+            AnimatedModTileOverlay.Tick();
             if (editorActive && _window.IsCreated)
             {
                 if (Input.GetKeyDown(CfgFenceKey.Value))
