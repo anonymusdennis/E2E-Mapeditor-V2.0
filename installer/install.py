@@ -14,6 +14,7 @@ Vote here: https://github.com/anonymusdennis/E2E-Mapeditor-V2.0/issues/5
 import os
 import sys
 import platform
+import re
 import shutil
 import zipfile
 import urllib.request
@@ -142,16 +143,14 @@ def _patch_run_bepinex(game_path: str):
     with open(script, "r") as f:
         content = f.read()
 
-    # Set correct executable name
-    if "TheEscapists2.x86_64" not in content:
-        content = content.replace(
-            'executable_name=""',
-            'executable_name="TheEscapists2.x86_64"'
-        )
-        content = content.replace(
-            "executable_name=",
-            'executable_name="TheEscapists2.x86_64" # patched by E2E installer\n# original: '
-        )
+    # Set correct executable name (only replace if it's blank or missing)
+    exe_match = re.search(r'^executable_name=(.*)$', content, re.MULTILINE)
+    if exe_match:
+        current_val = exe_match.group(1).strip('"').strip("'")
+        if current_val != "TheEscapists2.x86_64":
+            content = content[:exe_match.start()] + \
+                      'executable_name="TheEscapists2.x86_64"' + \
+                      content[exe_match.end():]
 
     # Apply LD_LIBRARY_PATH fix if not already present
     mono_path = '"${BASEDIR}/TheEscapists2_Data/Mono/x86_64"'
@@ -247,8 +246,8 @@ def install():
 
     if ok:
         print("\n✅ Installation complete!")
-        print(f"\nStart The Escapists 2 once so BepInEx generates its folders,")
-        print(f"then open http://127.0.0.1:8723 in your browser when in the level editor.")
+        print("\nStart The Escapists 2 once so BepInEx generates its folders,")
+        print("then open http://127.0.0.1:8723 in your browser when in the level editor.")
     else:
         print("\n❌ Installation may be incomplete – see errors above.")
 
