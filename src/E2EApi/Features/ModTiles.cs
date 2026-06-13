@@ -26,6 +26,7 @@ namespace E2EApi.Features
             public bool Decor;     // false = under characters, true = above
             public string Atlas;   // atlas asset name
             public int Rx, Ry, Rw, Rh; // atlas pixel rect, bottom-left origin
+            public float Rotation; // clockwise degrees (0 = no rotation)
 
             public int WTiles => (Rw + TileSets.TilePixels - 1) / TileSets.TilePixels;
             public int HTiles => (Rh + TileSets.TilePixels - 1) / TileSets.TilePixels;
@@ -38,8 +39,13 @@ namespace E2EApi.Features
 
             public string Serialize()
             {
-                return X + "," + Y + "," + Layer + "," + (Decor ? "d" : "f") + "," +
+                string line = X + "," + Y + "," + Layer + "," + (Decor ? "d" : "f") + "," +
                     Rx + "," + Ry + "," + Rw + "," + Rh + "," + Atlas;
+                if (Rotation != 0f)
+                {
+                    line += ",rot:" + Rotation.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
+                }
+                return line;
             }
 
             public static Placement Parse(string line)
@@ -58,7 +64,20 @@ namespace E2EApi.Features
                     return null;
                 }
                 p.Decor = parts[3] == "d";
-                p.Atlas = string.Join(",", parts, 8, parts.Length - 8);
+                // Detect optional trailing rotation token "rot:<value>" (backward-compatible)
+                int atlasEnd = parts.Length;
+                if (atlasEnd > 8 && parts[atlasEnd - 1].StartsWith("rot:"))
+                {
+                    float rot;
+                    if (float.TryParse(parts[atlasEnd - 1].Substring(4),
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out rot))
+                    {
+                        p.Rotation = rot;
+                    }
+                    atlasEnd--;
+                }
+                p.Atlas = string.Join(",", parts, 8, atlasEnd - 8);
                 return p;
             }
         }
@@ -98,7 +117,7 @@ namespace E2EApi.Features
         /// the same mode on the same layer is replaced.
         /// </summary>
         public static void Place(int x, int y, int layer, bool decor,
-            string atlas, int rx, int ry, int rw, int rh)
+            string atlas, int rx, int ry, int rw, int rh, float rotation = 0f)
         {
             Initialise();
             Placements.RemoveAll(p =>
@@ -114,8 +133,58 @@ namespace E2EApi.Features
                 Ry = ry,
                 Rw = rw,
                 Rh = rh,
+                Rotation = rotation,
             });
             Version++;
+        }
+
+        /// <summary>Return the topmost placement covering the tile, or null.</summary>
+        public static Placement GetAt(int x, int y, int layer)
+        {
+            for (int i = Placements.Count - 1; i >= 0; i--)
+            {
+                if (Placements[i].Covers(x, y, layer))
+                {
+                    return Placements[i];
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Rotate every placement covering the tile by <paramref name="delta"/> degrees.
+        /// Returns how many placements were rotated.
+        /// </summary>
+        public static int RotateAt(int x, int y, int layer, float delta)
+        {
+            int count = 0;
+            foreach (var p in Placements)
+            {
+                if (p.Covers(x, y, layer))
+                {
+                    p.Rotation = NormalizeAngle(p.Rotation + delta);
+                    count++;
+                }
+            }
+            if (count > 0)
+            {
+                Version++;
+            }
+            return count;
+        }
+
+        /// <summary>Rotate a specific placement by <paramref name="delta"/> degrees.</summary>
+        public static void Rotate(Placement placement, float delta)
+        {
+            placement.Rotation = NormalizeAngle(placement.Rotation + delta);
+            Version++;
+        }
+
+        private static float NormalizeAngle(float angle)
+        {
+            angle %= 360f;
+            if (angle < 0f) angle += 360f;
+            return angle;
         }
 
         /// <summary>Remove every placement covering the tile. Returns how many.</summary>
