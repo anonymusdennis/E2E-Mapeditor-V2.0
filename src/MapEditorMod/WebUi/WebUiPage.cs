@@ -1414,6 +1414,7 @@ async function autoDetectFrames() {
     function regionHasContent(x, y, w, h) {
       if (x < 0 || y < 0 || x + w > cv.width || y + h > cv.height) return false;
       const d = ctx.getImageData(x, y, w, h).data;
+      // alpha threshold: >10/255 (~0.04), matching RegionHasContent in TileSets.cs
       for (let i = 3; i < d.length; i += 4) if (d[i] > 10) return true;
       return false;
     }
@@ -1464,7 +1465,7 @@ async function autoDetectFrames() {
       return;
     }
     // convert to frame objects
-    const newFrames = best.map(({ cx: fcx, fcy: _unused, cy: fcy }) => {
+    const newFrames = best.map(({ cx: fcx, cy: fcy }) => {
       const fw = tsSel.cw * 32, fh = tsSel.ch * 32;
       const fx = fcx * 32;
       const fy = tsAtlas.h - (fcy * 32 + fh);  // bottom-left

@@ -650,7 +650,7 @@ namespace E2EApi.Editor
 
         /// <summary>
         /// Returns true if the atlas region (bottom-left origin, pixel coords) has
-        /// at least one pixel with alpha > 10. Used by the auto-detect animation feature.
+        /// at least one pixel with alpha > 0.04 (~10/255). Used by the auto-detect animation feature.
         /// </summary>
         public static bool RegionHasContent(string atlasName, int x, int y, int w, int h)
         {
