@@ -1,0 +1,114 @@
+name: Release
+
+# Triggered manually from the Actions tab:
+#   - version:      new release tag, e.g. v2.0.1
+#   - source_tag:   tag to pull pre-built DLLs from (default: v2.0.0)
+#
+# Note: Building from source requires game assemblies (Assembly-CSharp.dll,
+# BepInEx core, etc.) that cannot be distributed in CI for copyright reasons.
+# This workflow therefore repackages existing DLLs with the latest installer.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version tag (e.g. v2.0.1)"
+        required: true
+        default: "v2.0.1"
+      source_tag:
+        description: "Source tag to pull DLLs from"
+        required: true
+        default: "v2.0.0"
+      prerelease:
+        description: "Mark as pre-release?"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download DLLs from ${{ inputs.source_tag }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p stage/BepInEx/plugins/E2EMapEditor
+          # Download the release zip from the source tag
+          SOURCE_ZIP="E2EMapEditor-${{ inputs.source_tag }}.zip"
+          gh release download "${{ inputs.source_tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "*.zip" \
+            --output source.zip
+          # Extract only the DLLs
+          unzip -j source.zip \
+            "BepInEx/plugins/E2EMapEditor/E2EApi.dll" \
+            "BepInEx/plugins/E2EMapEditor/MapEditorMod.dll" \
+            -d stage/BepInEx/plugins/E2EMapEditor/
+
+      - name: Add installer and docs
+        run: |
+          mkdir -p stage/installer
+          cp installer/install.py  stage/installer/
+          cp installer/install.bat stage/installer/
+          cp installer/install.sh  stage/installer/
+          chmod +x stage/installer/install.sh
+          cp docs/user-install.md stage/README-INSTALL.md
+
+      - name: Verify contents
+        run: |
+          echo "=== Release contents ==="
+          find stage -type f | sort
+          echo ""
+          ls -lh stage/BepInEx/plugins/E2EMapEditor/
+          ls -lh stage/installer/
+
+      - name: Package zip
+        run: |
+          VERSION="${{ inputs.version }}"
+          ZIP="E2EMapEditor-${VERSION}.zip"
+          (cd stage && zip -qr "../${ZIP}" .)
+          echo "ZIP=${ZIP}" >> "$GITHUB_ENV"
+          echo "Created ${ZIP}:"
+          unzip -l "${ZIP}"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ inputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --title "${{ inputs.version }}" \
+            --notes "$(cat <<'NOTES'
+          ## What's new
+
+          ### ${{ inputs.version }}
+
+          Adds a **one-click installer** — no more manual BepInEx setup.
+
+          | Platform | How to install |
+          |----------|---------------|
+          | **Windows** | Extract zip → double-click `installer\install.bat` |
+          | **Linux / Steam Deck** | Extract zip → `cd installer && ./install.sh` |
+
+          The installer:
+          - Auto-detects the game folder (common Steam paths)
+          - Asks you to confirm or enter a custom path
+          - Downloads and installs **BepInEx 5.4.21** (the only supported version)
+          - Copies the mod DLLs into the right place
+          - Patches `run_bepinex.sh` on Linux/Steam Deck automatically
+          - Supports uninstall: `install.bat uninstall` / `./install.sh uninstall`
+
+          DLLs are identical to ${{ inputs.source_tag }} (mod code unchanged; only the installer was added).
+
+          ---
+          Think this tool should be extended and improved? Vote here: https://github.com/anonymusdennis/E2E-Mapeditor-V2.0/issues/5
+          NOTES
+          )" \
+            ${{ inputs.prerelease == 'true' && '--prerelease' || '' }} \
+            "${{ env.ZIP }}"
