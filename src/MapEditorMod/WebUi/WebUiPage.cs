@@ -636,6 +636,7 @@ function atlasZoom() {
 function cellFromEvent(ev) {
   const img = el('ts_img');
   const r = img.getBoundingClientRect();
+  if (!r.width || !r.height) return { cx: 0, cy: 0 };
   const px = (ev.clientX - r.left) * (tsAtlas.w / r.width);
   const py = (ev.clientY - r.top) * (tsAtlas.h / r.height);
   return {
@@ -672,7 +673,7 @@ async function armStamp() {
 
 (function bindAtlasPicker() {
   document.addEventListener('mousedown', ev => {
-    if (ev.target.id !== 'ts_img' || !tsAtlas) return;
+    if (!tsAtlas || !ev.target.closest('#ts_wrap')) return;
     ev.preventDefault();
     tsDrag = cellFromEvent(ev);
     tsSel = { cx: tsDrag.cx, cy: tsDrag.cy, cw: 1, ch: 1 };
