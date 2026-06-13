@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>E2EApi</AssemblyName>
+    <RootNamespace>E2EApi</RootNamespace>
+    <Product>E2E Modding API</Product>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx" Private="false" />
+    <Reference Include="0Harmony" Private="false" />
+    <Reference Include="UnityEngine" Private="false" />
+    <Reference Include="UnityEngine.UI" Private="false" />
+    <Reference Include="Assembly-CSharp" Publicize="true" Private="false" />
+    <Reference Include="Rewired_Core" Private="false" />
+    <Reference Include="Assembly-CSharp-firstpass" Publicize="true" Private="false" />
+    <Reference Include="TileSystem.Runtime" Publicize="true" Private="false" />
+  </ItemGroup>
+</Project>

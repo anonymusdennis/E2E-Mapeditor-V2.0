@@ -1,0 +1,27 @@
+# --- copyright hygiene: never publish game-derived material ---
+# decompiled game source + asset dumps
+reference/
+# recovered legacy artifacts (game saves, old builds, reverse-engineering tools)
+old/
+# any compiled assemblies (incl. publicized/original game DLLs)
+*.dll
+*.exe
+*.pdb
+Assembly-CSharp*
+
+# --- build output ---
+bin/
+obj/
+dist/
+*.zip
+*.user
+
+# --- logs / scratch ---
+*.log
+/tmp/
+*.tmp
+
+# --- local tool state ---
+.vs/
+.idea/
+.vscode/

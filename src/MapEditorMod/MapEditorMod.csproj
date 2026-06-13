@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>MapEditorMod</AssemblyName>
+    <RootNamespace>MapEditorMod</RootNamespace>
+    <Product>E2E Map Editor</Product>
+    <Version>2.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- No game-DLL references on purpose: the mod must speak to the game
+         exclusively through E2EApi. -->
+    <Reference Include="BepInEx" Private="false" />
+    <Reference Include="0Harmony" Private="false" />
+    <Reference Include="UnityEngine" Private="false" />
+    <Reference Include="UnityEngine.UI" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../E2EApi/E2EApi.csproj" />
+  </ItemGroup>
+</Project>

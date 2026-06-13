@@ -1,0 +1,24 @@
+<Project>
+  <PropertyGroup>
+    <!-- Override with: dotnet build -p:GamePath="/path/to/The Escapists 2" -->
+    <GamePath Condition="'$(GamePath)' == ''">$(HOME)/.local/share/Steam/steamapps/common/The Escapists 2</GamePath>
+    <GameManaged>$(GamePath)/TheEscapists2_Data/Managed</GameManaged>
+    <BepInExCore>$(GamePath)/BepInEx/core</BepInExCore>
+
+    <!-- Unity 5.5 Mono ≈ .NET 3.5 profile -->
+    <TargetFramework>net35</TargetFramework>
+    <LangVersion>9</LangVersion>
+    <Nullable>disable</Nullable>
+    <DebugType>portable</DebugType>
+    <AssemblySearchPaths>$(AssemblySearchPaths);$(GameManaged);$(BepInExCore)</AssemblySearchPaths>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- net35 reference assemblies so the modern SDK can target it -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <!-- build-time IL publicizer for game assemblies (Publicize="true" on a Reference) -->
+    <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.1" PrivateAssets="all" />
+  </ItemGroup>
+</Project>
