@@ -135,7 +135,6 @@ namespace MapEditorMod
             {
                 EditorTools.Tick();
             }
-            AnimatedModTileOverlay.Tick();
             if (editorActive && _window.IsCreated)
             {
                 if (Input.GetKeyDown(CfgFenceKey.Value))

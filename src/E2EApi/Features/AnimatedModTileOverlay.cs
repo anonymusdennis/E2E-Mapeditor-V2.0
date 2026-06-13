@@ -3,7 +3,7 @@ using E2EApi.Editor;
 using E2EApi.Features;
 using UnityEngine;
 
-namespace MapEditorMod
+namespace E2EApi.Features
 {
     /// <summary>
     /// Renders <see cref="AnimatedModTiles"/> placements as world-space sprites
