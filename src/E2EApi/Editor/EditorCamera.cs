@@ -51,6 +51,31 @@ namespace E2EApi.Editor
         }
 
         /// <summary>
+        /// Vanilla rewrites edge-pan distance every frame; call each tick while locked.
+        /// </summary>
+        public static void MaintainLock()
+        {
+            if (!_lockPan)
+            {
+                return;
+            }
+            var controller = LevelEditor_Controller.GetInstance();
+            if (controller == null)
+            {
+                return;
+            }
+            if (_lockAppliedTo != controller)
+            {
+                _savedEdgeDistance = controller.m_fCameraPanEdgeDistance;
+                _lockAppliedTo = controller;
+            }
+            if (controller.m_fCameraPanEdgeDistance != 0f)
+            {
+                controller.m_fCameraPanEdgeDistance = 0f;
+            }
+        }
+
+        /// <summary>
         /// Adds extra zoom-in steps below the vanilla minimum (each step halves
         /// the orthographic size). Safe to call repeatedly; runs once per editor
         /// session.

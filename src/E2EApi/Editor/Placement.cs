@@ -1,3 +1,5 @@
+using E2EApi.Features;
+
 namespace E2EApi.Editor
 {
     /// <summary>
@@ -15,10 +17,15 @@ namespace E2EApi.Editor
 
         /// <summary>
         /// Place a single block (tile, object, decoration, wall, room or complex)
-        /// at grid position (x, y). Coordinates are 0-119.
+        /// at grid position (x, y). Vanilla instructions only accept native
+        /// 0-119 coordinates; expanded map bounds require sidecar-backed tools.
         /// </summary>
         public static bool PlaceBlock(int blockId, int x, int y, int seed = 0, bool checkLimits = false)
         {
+            if (!MapGeometry.IsWithinNativeBounds(x, y))
+            {
+                return false;
+            }
             var mgr = Instructions;
             return mgr != null && mgr.AddBlockOnce(blockId, (sbyte)x, (sbyte)y, seed, bDontRun: false, checkLimits);
         }
@@ -26,6 +33,10 @@ namespace E2EApi.Editor
         /// <summary>Fill a rectangular area with a block.</summary>
         public static bool PlaceArea(int blockId, int x, int y, int width, int height, int seed = 0)
         {
+            if (!MapGeometry.IsWithinNativeBounds(x, y))
+            {
+                return false;
+            }
             var mgr = Instructions;
             return mgr != null && mgr.AddBlockArea(blockId, (sbyte)x, (sbyte)y, (sbyte)width, (sbyte)height, seed);
         }
@@ -33,6 +44,10 @@ namespace E2EApi.Editor
         /// <summary>Delete whatever occupies (x, y) of the given delete type.</summary>
         public static bool Delete(int x, int y, BuildingInstructionManager.InstructionDeleteElement.DeleteType type)
         {
+            if (!MapGeometry.IsWithinNativeBounds(x, y))
+            {
+                return false;
+            }
             var mgr = Instructions;
             if (mgr == null)
             {

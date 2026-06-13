@@ -328,6 +328,24 @@ namespace MapEditorMod.WebUi
                         ArmStamp(atlas, sx, sy, sw, sh, decor)));
                     return 200;
                 }
+                if (method == "POST" && path == "/api/composite/arm")
+                {
+                    body = Encoding.UTF8.GetBytes(
+                        MainThread.Run(() => ArmCompositeStamp(query, requestBody)));
+                    return 200;
+                }
+                if (method == "POST" && path == "/api/connected/arm")
+                {
+                    body = Encoding.UTF8.GetBytes(
+                        MainThread.Run(() => ArmConnectedStamp(query, requestBody)));
+                    return 200;
+                }
+                if (path == "/api/composite/import")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                        ImportCompositeRegion(query)));
+                    return 200;
+                }
                 if (method == "POST" && path == "/api/tiles/place")
                 {
                     string atlas = Get(query, "atlas");
@@ -534,6 +552,17 @@ namespace MapEditorMod.WebUi
                     body = Encoding.UTF8.GetBytes(MainThread.Run(() => RunCheat(name, value)));
                     return 200;
                 }
+                if (path == "/api/geometry")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() => MapGeometry.ToJson()));
+                    return 200;
+                }
+                if (method == "POST" && path.StartsWith("/api/geometry/"))
+                {
+                    string action = path.Substring("/api/geometry/".Length);
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() => HandleGeometry(action, query)));
+                    return 200;
+                }
                 body = Encoding.UTF8.GetBytes("{\"error\":\"not found\"}");
                 return 404;
             }
@@ -569,6 +598,10 @@ namespace MapEditorMod.WebUi
             sb.Append(",\"modTiles\":").Append(ModTiles.Count);
             sb.Append(",\"animatedTiles\":").Append(AnimatedModTiles.Count);
             sb.Append(",\"editorLayer\":").Append(Grid.CurrentEditorLayer);
+            sb.Append(",\"nativeEditorLayer\":").Append(Grid.CurrentNativeEditorLayer);
+            sb.Append(",\"geometryFeatureVersion\":").Append(ModExtras.Current.GeometryFeatureVersion);
+            sb.Append(",\"geometryHash\":").Append(Quote(ModExtras.Current.GeometryHash ?? ""));
+            sb.Append(",\"mapGeometry\":").Append(MapGeometry.ToJson());
             sb.Append(",\"brush\":").Append(Blocks.CurrentBrush);
             sb.Append(",\"stamp\":");
             var stamp = EditorTools.Stamp;
@@ -709,6 +742,7 @@ namespace MapEditorMod.WebUi
                 case EditorToolMode.EraseTile: return "tileerase";
                 case EditorToolMode.PaintAnimatedTile: return "animtilepaint";
                 case EditorToolMode.EraseAnimatedTile: return "animtileerase";
+                case EditorToolMode.PaintConnectedTile: return "connectedpaint";
                 default: return "none";
             }
         }
@@ -730,6 +764,293 @@ namespace MapEditorMod.WebUi
             };
             EditorTools.SetMode(EditorToolMode.PaintTile);
             return "{\"ok\":true,\"msg\":" + Quote("stamp armed — " + EditorTools.HintText()) + "}";
+        }
+
+        private static string ArmCompositeStamp(
+            Dictionary<string, string> query, string body)
+        {
+            string name = Get(query, "name");
+            int wTiles = GetInt(query, "w", 1);
+            int hTiles = GetInt(query, "h", 1);
+            var parts = ParseCompositeParts(body);
+            if (parts.Count == 0)
+            {
+                return "{\"ok\":false,\"msg\":\"composite has no parts\"}";
+            }
+            foreach (var part in parts)
+            {
+                if (part.Vanilla)
+                {
+                    if (!Blocks.Exists(part.BlockId))
+                    {
+                        return "{\"ok\":false,\"msg\":\"block not found: " + part.BlockId + "\"}";
+                    }
+                }
+                else if (part.Animated)
+                {
+                    if (part.Frames == null || part.Frames.Count == 0)
+                    {
+                        return "{\"ok\":false,\"msg\":\"animated part has no frames\"}";
+                    }
+                    if (!TileSets.HasAtlas(part.Frames[0].Atlas))
+                    {
+                        return "{\"ok\":false,\"msg\":\"atlas not cached: " +
+                            part.Frames[0].Atlas + "\"}";
+                    }
+                }
+                else if (!TileSets.HasAtlas(part.Atlas))
+                {
+                    return "{\"ok\":false,\"msg\":\"atlas not cached: " + part.Atlas + "\"}";
+                }
+            }
+            EditorTools.Stamp = null;
+            EditorTools.AnimatedStamp = null;
+            EditorTools.Composite = new CompositeStamp
+            {
+                Name = string.IsNullOrEmpty(name) ? "combined block" : name,
+                WTiles = System.Math.Max(1, wTiles),
+                HTiles = System.Math.Max(1, hTiles),
+                Parts = parts,
+            };
+            EditorTools.SetMode(EditorToolMode.PaintTile);
+            return "{\"ok\":true,\"msg\":" +
+                Quote("combined block armed — " + EditorTools.HintText()) + "}";
+        }
+
+        private static string ArmConnectedStamp(
+            Dictionary<string, string> query, string body)
+        {
+            var stamp = new ConnectedTileStamp
+            {
+                Id = Get(query, "id"),
+                Name = Get(query, "name"),
+                Mode = Get(query, "mode"),
+                Decor = GetBool(query, "decor"),
+                Color = GetInt(query, "color", 1),
+                Auto = !GetBool(query, "manual"),
+                LockPlaced = GetBool(query, "lock"),
+                CollideWithPlayers = GetBool(query, "collide"),
+                Destructible = GetBool(query, "destructible"),
+                Damaging = GetBool(query, "damaging"),
+            };
+            if (string.IsNullOrEmpty(stamp.Name)) stamp.Name = "connected tile";
+            if (string.IsNullOrEmpty(stamp.Mode)) stamp.Mode = "floor";
+            foreach (var line in body.Split('\n'))
+            {
+                string trimmed = line.Trim();
+                if (trimmed.Length == 0) continue;
+                string[] parts = trimmed.Split('|');
+                if (parts.Length < 2) continue;
+                int mask;
+                if (!int.TryParse(parts[0], out mask)) continue;
+                var variants = new List<ConnectedVariant>();
+                foreach (var raw in parts[1].Split(';'))
+                {
+                    string[] v = raw.Split(':');
+                    if (v.Length < 6) continue;
+                    int rx, ry, rw, rh, weight;
+                    if (!int.TryParse(v[v.Length - 5], out rx) ||
+                        !int.TryParse(v[v.Length - 4], out ry) ||
+                        !int.TryParse(v[v.Length - 3], out rw) ||
+                        !int.TryParse(v[v.Length - 2], out rh) ||
+                        !int.TryParse(v[v.Length - 1], out weight))
+                    {
+                        continue;
+                    }
+                    string atlas = string.Join(":", v, 0, v.Length - 5);
+                    if (!TileSets.HasAtlas(atlas))
+                    {
+                        return "{\"ok\":false,\"msg\":\"atlas not cached: " + atlas + "\"}";
+                    }
+                    variants.Add(new ConnectedVariant
+                    {
+                        Atlas = atlas, X = rx, Y = ry, W = rw, H = rh,
+                        Weight = weight,
+                    });
+                }
+                if (variants.Count > 0) stamp.Variants[mask] = variants;
+            }
+            if (stamp.Variants.Count == 0)
+            {
+                return "{\"ok\":false,\"msg\":\"connected texture has no configured variants\"}";
+            }
+            EditorTools.ArmConnectedStamp(stamp);
+            return "{\"ok\":true,\"msg\":" +
+                Quote("connected brush armed — " + EditorTools.HintText()) + "}";
+        }
+
+        private static List<CompositeStampPart> ParseCompositeParts(string body)
+        {
+            var result = new List<CompositeStampPart>();
+            if (string.IsNullOrEmpty(body))
+            {
+                return result;
+            }
+            foreach (var line in body.Split('\n'))
+            {
+                string trimmed = line.Trim();
+                if (trimmed.Length == 0)
+                {
+                    continue;
+                }
+                string[] fields = trimmed.Split('|');
+                if (fields.Length < 2)
+                {
+                    continue;
+                }
+                string[] h = fields[0].Split(',');
+                if (h.Length < 6)
+                {
+                    continue;
+                }
+                int dx, dy, layer;
+                if (!int.TryParse(h[0], out dx) ||
+                    !int.TryParse(h[1], out dy) ||
+                    !int.TryParse(h[2], out layer))
+                {
+                    continue;
+                }
+                bool decor = h[3] == "d";
+                bool animated = h[4] == "a";
+                bool vanilla = h[4] == "v";
+                var part = new CompositeStampPart
+                {
+                    Dx = dx,
+                    Dy = dy,
+                    Layer = layer,
+                    Decor = decor,
+                    Animated = animated,
+                    Vanilla = vanilla,
+                };
+                if (vanilla)
+                {
+                    int blockId;
+                    if (!int.TryParse(fields[1], out blockId))
+                    {
+                        continue;
+                    }
+                    part.BlockId = blockId;
+                }
+                else if (animated)
+                {
+                    float fps;
+                    part.Fps = float.TryParse(h.Length > 5 ? h[5] : "4",
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out fps)
+                        ? fps : 4f;
+                    part.Loop = h.Length <= 6 || h[6] == "1";
+                    part.PingPong = h.Length > 7 && h[7] == "p";
+                    part.Frames = ParseFramesParam(fields[1]);
+                }
+                else
+                {
+                    string[] p = fields[1].Split(':');
+                    if (p.Length < 5)
+                    {
+                        continue;
+                    }
+                    int rx, ry, rw, rh;
+                    if (!int.TryParse(p[p.Length - 4], out rx) ||
+                        !int.TryParse(p[p.Length - 3], out ry) ||
+                        !int.TryParse(p[p.Length - 2], out rw) ||
+                        !int.TryParse(p[p.Length - 1], out rh))
+                    {
+                        continue;
+                    }
+                    part.Atlas = string.Join(":", p, 0, p.Length - 4);
+                    part.X = rx;
+                    part.Y = ry;
+                    part.W = rw;
+                    part.H = rh;
+                }
+                result.Add(part);
+            }
+            return result;
+        }
+
+        private static string ImportCompositeRegion(Dictionary<string, string> query)
+        {
+            int x = GetInt(query, "x", -1);
+            int y = GetInt(query, "y", -1);
+            int w = GetInt(query, "w", 0);
+            int h = GetInt(query, "h", 0);
+            if (x < 0 || y < 0 || w <= 0 || h <= 0)
+            {
+                return "{\"ok\":false,\"msg\":\"bad region\"}";
+            }
+            var seenStatic = new HashSet<string>();
+            var seenAnim = new HashSet<string>();
+            var sb = new StringBuilder();
+            sb.Append("{\"ok\":true,\"parts\":[");
+            bool first = true;
+            for (int layer = 0; layer < Grid.LayerCount; layer++)
+            {
+                foreach (var p in ModTiles.All())
+                {
+                    if (p.Layer != layer || p.X < x || p.Y < y ||
+                        p.X >= x + w || p.Y >= y + h)
+                    {
+                        continue;
+                    }
+                    string key = p.X + "," + p.Y + "," + p.Layer + "," +
+                        p.Decor + "," + p.Atlas;
+                    if (!seenStatic.Add(key))
+                    {
+                        continue;
+                    }
+                    if (!first) sb.Append(",");
+                    first = false;
+                    sb.Append("{\"kind\":\"static\",\"dx\":").Append(p.X - x)
+                      .Append(",\"dy\":").Append(p.Y - y)
+                      .Append(",\"layer\":").Append(p.Layer)
+                      .Append(",\"decor\":").Append(p.Decor ? "true" : "false")
+                      .Append(",\"atlas\":").Append(Quote(p.Atlas))
+                      .Append(",\"x\":").Append(p.Rx)
+                      .Append(",\"y\":").Append(p.Ry)
+                      .Append(",\"w\":").Append(p.Rw)
+                      .Append(",\"h\":").Append(p.Rh)
+                      .Append("}");
+                }
+                foreach (var p in AnimatedModTiles.All())
+                {
+                    if (p.Layer != layer || p.X < x || p.Y < y ||
+                        p.X >= x + w || p.Y >= y + h)
+                    {
+                        continue;
+                    }
+                    string key = p.X + "," + p.Y + "," + p.Layer + "," +
+                        p.Decor + "," + p.Frames.Count;
+                    if (!seenAnim.Add(key))
+                    {
+                        continue;
+                    }
+                    if (!first) sb.Append(",");
+                    first = false;
+                    sb.Append("{\"kind\":\"animated\",\"dx\":").Append(p.X - x)
+                      .Append(",\"dy\":").Append(p.Y - y)
+                      .Append(",\"layer\":").Append(p.Layer)
+                      .Append(",\"decor\":").Append(p.Decor ? "true" : "false")
+                      .Append(",\"fps\":").Append(p.Fps.ToString("0.##",
+                          System.Globalization.CultureInfo.InvariantCulture))
+                      .Append(",\"loop\":").Append(p.Loop ? "true" : "false")
+                      .Append(",\"pingpong\":").Append(p.PingPong ? "true" : "false")
+                      .Append(",\"frames\":[");
+                    for (int i = 0; i < p.Frames.Count; i++)
+                    {
+                        if (i > 0) sb.Append(",");
+                        var f = p.Frames[i];
+                        sb.Append("{\"atlas\":").Append(Quote(f.Atlas))
+                          .Append(",\"x\":").Append(f.Rx)
+                          .Append(",\"y\":").Append(f.Ry)
+                          .Append(",\"w\":").Append(f.Rw)
+                          .Append(",\"h\":").Append(f.Rh)
+                          .Append("}");
+                    }
+                    sb.Append("]}");
+                }
+            }
+            sb.Append("],\"w\":").Append(w).Append(",\"h\":").Append(h).Append("}");
+            return sb.ToString();
         }
 
         // ---- animated tile handlers ----
@@ -878,6 +1199,7 @@ namespace MapEditorMod.WebUi
                 case "tileerase": mode = EditorToolMode.EraseTile; break;
                 case "animtilepaint": mode = EditorToolMode.PaintAnimatedTile; break;
                 case "animtileerase": mode = EditorToolMode.EraseAnimatedTile; break;
+                case "connectedpaint": mode = EditorToolMode.PaintConnectedTile; break;
                 case "none":
                 case "": mode = EditorToolMode.None; break;
                 default:
@@ -902,9 +1224,18 @@ namespace MapEditorMod.WebUi
                     Plugin.CfgIgnoreAllRestrictions.Value = value;
                     Restrictions.IgnoreAll = value;
                     break;
-                case "xray": XRay.Enabled = value; break;
-                case "fenceOverlay": FenceOverlay.Enabled = value; break;
-                case "arrows": TriggerArrows.Enabled = value; break;
+                case "xray":
+                    Plugin.CfgXRay.Value = value;
+                    XRay.Enabled = value;
+                    break;
+                case "fenceOverlay":
+                    Plugin.CfgFenceOverlay.Value = value;
+                    FenceOverlay.Enabled = value;
+                    break;
+                case "arrows":
+                    Plugin.CfgTriggerArrows.Value = value;
+                    TriggerArrows.Enabled = value;
+                    break;
                 case "cameraLock":
                     Plugin.CfgLockCameraPan.Value = value;
                     EditorCamera.LockPan = value;
@@ -1034,6 +1365,85 @@ namespace MapEditorMod.WebUi
             return "{\"ok\":false,\"msg\":\"no player pawn (start the map first)\"}";
         }
 
+        private static string HandleGeometry(string action, Dictionary<string, string> query)
+        {
+            if (!E2EApi.Events.GameEvents.IsEditorActive)
+            {
+                return "{\"ok\":false,\"msg\":\"open the level editor first\"}";
+            }
+            try
+            {
+                switch (action)
+                {
+                    case "select":
+                        MapGeometry.SelectLayer(GetInt(query, "index", 0));
+                        break;
+                    case "add":
+                        MapGeometry.AddLayer(ParseGeometryLayerType(Get(query, "type")));
+                        break;
+                    case "remove":
+                        MapGeometry.RemoveLayer(GetInt(query, "index", MapGeometry.SelectedVirtualLayerIndex));
+                        break;
+                    case "move":
+                        MapGeometry.MoveLayer(
+                            GetInt(query, "index", MapGeometry.SelectedVirtualLayerIndex),
+                            GetInt(query, "delta", 0));
+                        break;
+                    case "duplicate":
+                        MapGeometry.DuplicateLayer(GetInt(query, "index", MapGeometry.SelectedVirtualLayerIndex));
+                        break;
+                    case "type":
+                        MapGeometry.SetLayerType(
+                            GetInt(query, "index", MapGeometry.SelectedVirtualLayerIndex),
+                            ParseGeometryLayerType(Get(query, "type")));
+                        break;
+                    case "bounds-delta":
+                        ApplyGeometryBoundsDelta(Get(query, "field"), GetInt(query, "delta", 0));
+                        break;
+                    case "reset":
+                        MapGeometry.ResetDefault();
+                        break;
+                    default:
+                        return "{\"ok\":false,\"msg\":\"unknown geometry action\"}";
+                }
+                return "{\"ok\":true,\"mapGeometry\":" + MapGeometry.ToJson() + "}";
+            }
+            catch (Exception e)
+            {
+                return "{\"ok\":false,\"msg\":" + Quote(e.Message) + "}";
+            }
+        }
+
+        private static void ApplyGeometryBoundsDelta(string field, int delta)
+        {
+            int width = MapGeometry.Width;
+            int height = MapGeometry.Height;
+            int originX = MapGeometry.OriginX;
+            int originY = MapGeometry.OriginY;
+            switch (field)
+            {
+                case "width": width += delta; break;
+                case "height": height += delta; break;
+                case "originX": originX += delta; break;
+                case "originY": originY += delta; break;
+                default: return;
+            }
+            MapGeometry.SetBounds(width, height, originX, originY);
+        }
+
+        private static MapGeometry.VirtualLayerType ParseGeometryLayerType(string value)
+        {
+            try
+            {
+                return (MapGeometry.VirtualLayerType)Enum.Parse(
+                    typeof(MapGeometry.VirtualLayerType), value, true);
+            }
+            catch
+            {
+                return MapGeometry.VirtualLayerType.Ground;
+            }
+        }
+
         private static string Ok(string msg) => "{\"ok\":true,\"msg\":" + Quote(msg) + "}";
 
         private static string GetDebugJson() => E2EApi.Diagnostics.OverlayDebugJson();
@@ -1094,7 +1504,15 @@ namespace MapEditorMod.WebUi
         }
 
         private static bool GetBool(Dictionary<string, string> query, string key)
-            => Get(query, key) == "true";
+        {
+            string v = Get(query, key);
+            if (string.IsNullOrEmpty(v))
+            {
+                return false;
+            }
+            v = v.ToLowerInvariant();
+            return v == "true" || v == "1" || v == "yes" || v == "on";
+        }
 
         private static int GetInt(Dictionary<string, string> query, string key, int fallback)
         {

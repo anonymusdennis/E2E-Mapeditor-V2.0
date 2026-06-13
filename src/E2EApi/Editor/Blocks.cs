@@ -60,6 +60,9 @@ namespace E2EApi.Editor
         /// <summary>Look up a block by ID, or null.</summary>
         public static BaseBuildingBlock Get(int blockId) => BuildingBlockManager.GetBlock(blockId);
 
+        /// <summary>True when a block id exists in the live registry.</summary>
+        public static bool Exists(int blockId) => Get(blockId) != null;
+
         /// <summary>
         /// Game-type-free spawnlist snapshot for UI consumption.
         /// Includes editor-only blocks when <see cref="ShowEditorOnly"/> is set.
@@ -232,6 +235,49 @@ namespace E2EApi.Editor
             }
             controller.ExternalSelectBlock(blockId);
             return true;
+        }
+
+        /// <summary>Clear the vanilla editor block brush when the editor is open.</summary>
+        public static void ClearBrush()
+        {
+            var controller = LevelEditor_Controller.GetInstance();
+            if (controller != null)
+            {
+                controller.m_CurrentBlock = -1;
+            }
+        }
+
+        /// <summary>
+        /// Delete content at a tile using the delete type that matches the block id's kind.
+        /// </summary>
+        public static bool DeleteAt(int blockId, int x, int y)
+        {
+            var block = Get(blockId);
+            if (block == null)
+            {
+                return false;
+            }
+            switch ((BlockKind)(int)block.BlockType)
+            {
+                case BlockKind.Wall:
+                    return Placement.Delete(x, y,
+                        BuildingInstructionManager.InstructionDeleteElement.DeleteType.Wall);
+                case BlockKind.Decoration:
+                    return Placement.Delete(x, y,
+                        BuildingInstructionManager.InstructionDeleteElement.DeleteType.Object);
+                case BlockKind.Object:
+                case BlockKind.Complex:
+                    return Placement.Delete(x, y,
+                        BuildingInstructionManager.InstructionDeleteElement.DeleteType.Object);
+                case BlockKind.Room:
+                    return Placement.Delete(x, y,
+                        BuildingInstructionManager.InstructionDeleteElement.DeleteType.Object);
+                case BlockKind.Tile:
+                    return Placement.Delete(x, y,
+                        BuildingInstructionManager.InstructionDeleteElement.DeleteType.Tile);
+                default:
+                    return false;
+            }
         }
 
         /// <summary>The block id currently on the editor brush (-1 = none/no editor).</summary>

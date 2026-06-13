@@ -21,6 +21,7 @@ namespace E2EApi.Features
 
         private static readonly List<GameObject> Markers = new List<GameObject>();
         private static int _builtVersion = -1;
+        private static int _builtGeometryVersion = -1;
         private static BaseLevelManager _builtFor;
         private static int _builtLayer = -1;
 
@@ -41,12 +42,14 @@ namespace E2EApi.Features
             }
             int editorLayer = Grid.CurrentEditorLayer;
             if (_builtVersion == ModTiles.Version && _builtFor == level &&
-                _builtLayer == editorLayer)
+                _builtLayer == editorLayer &&
+                _builtGeometryVersion == MapGeometry.Version)
             {
                 return;
             }
             Rebuild(editorLayer);
             _builtVersion = ModTiles.Version;
+            _builtGeometryVersion = MapGeometry.Version;
             _builtFor = level;
             _builtLayer = editorLayer;
         }

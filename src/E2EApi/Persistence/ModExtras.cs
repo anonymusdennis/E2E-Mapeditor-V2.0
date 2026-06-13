@@ -34,6 +34,12 @@ namespace E2EApi.Persistence
         /// <summary>If true, the map advertises that it needs this mod to play.</summary>
         public bool RequiresMod;
 
+        /// <summary>Virtual map geometry feature version from Level.e2e header.</summary>
+        public int GeometryFeatureVersion;
+
+        /// <summary>Hash of the virtual map geometry for multiplayer/API checks.</summary>
+        public string GeometryHash;
+
         private readonly Dictionary<string, List<string>> _sections =
             new Dictionary<string, List<string>>();
 
@@ -70,6 +76,9 @@ namespace E2EApi.Persistence
         }
 
         private static bool _editorHooked;
+        private static string _lastDirectory;
+        private static long _lastSidecarWriteTicks = long.MinValue;
+        private static bool _lastSidecarExists;
 
         internal static void EnsurePatched()
         {
@@ -98,11 +107,7 @@ namespace E2EApi.Persistence
                 {
                     // brand-new map: start from a clean slate
                     Current = new ModExtras();
-                    var handler = Loaded;
-                    if (handler != null)
-                    {
-                        handler(Current);
-                    }
+                    FireLoaded();
                 }
             }
             catch (Exception e)
@@ -120,23 +125,43 @@ namespace E2EApi.Persistence
         {
             try
             {
+                if (string.IsNullOrEmpty(directory))
+                {
+                    Current = new ModExtras();
+                    FireLoaded();
+                    return;
+                }
                 string path = Path.Combine(directory, FileName);
-                Current = File.Exists(path)
-                    ? Deserialize(File.ReadAllText(path))
-                    : new ModExtras();
-                if (File.Exists(path))
+                bool exists = File.Exists(path);
+                long ticks = exists ? File.GetLastWriteTimeUtc(path).Ticks : 0L;
+                if (string.Equals(_lastDirectory, directory, StringComparison.OrdinalIgnoreCase) &&
+                    _lastSidecarExists == exists &&
+                    _lastSidecarWriteTicks == ticks)
+                {
+                    return;
+                }
+                _lastDirectory = directory;
+                _lastSidecarExists = exists;
+                _lastSidecarWriteTicks = ticks;
+                Current = exists ? Deserialize(File.ReadAllText(path)) : new ModExtras();
+                if (exists)
                 {
                     Log.Info($"mod extras loaded ← {path}");
                 }
-                var handler = Loaded;
-                if (handler != null)
-                {
-                    handler(Current);
-                }
+                FireLoaded();
             }
             catch (Exception e)
             {
                 Log.Error("ModExtras directory load failed: " + e);
+            }
+        }
+
+        private static void FireLoaded()
+        {
+            var handler = Loaded;
+            if (handler != null)
+            {
+                handler(Current);
             }
         }
 
@@ -147,6 +172,14 @@ namespace E2EApi.Persistence
             var sb = new StringBuilder();
             sb.AppendLine(Magic);
             sb.AppendLine("requiresMod=" + (RequiresMod ? "true" : "false"));
+            if (GeometryFeatureVersion > 0)
+            {
+                sb.AppendLine("geometryVersion=" + GeometryFeatureVersion);
+            }
+            if (!string.IsNullOrEmpty(GeometryHash))
+            {
+                sb.AppendLine("geometryHash=" + GeometryHash);
+            }
             foreach (var pair in _sections)
             {
                 if (pair.Value.Count == 0)
@@ -190,6 +223,14 @@ namespace E2EApi.Persistence
                 else if (line.StartsWith("requiresMod="))
                 {
                     extras.RequiresMod = line.Substring("requiresMod=".Length) == "true";
+                }
+                else if (line.StartsWith("geometryVersion="))
+                {
+                    int.TryParse(line.Substring("geometryVersion=".Length), out extras.GeometryFeatureVersion);
+                }
+                else if (line.StartsWith("geometryHash="))
+                {
+                    extras.GeometryHash = line.Substring("geometryHash=".Length);
                 }
                 else if (current != null)
                 {
@@ -248,6 +289,7 @@ namespace E2EApi.Persistence
                         return;
                     }
                     File.WriteAllText(path, Current.Serialize());
+                    _lastDirectory = null;
                     Log.Info($"mod extras saved → {path}");
                 }
                 catch (Exception e)
@@ -282,11 +324,7 @@ namespace E2EApi.Persistence
                             Log.Info($"mod extras loaded ← {path}");
                         }
                     }
-                    var handler = Loaded;
-                    if (handler != null)
-                    {
-                        handler(Current);
-                    }
+                    FireLoaded();
                 }
                 catch (Exception e)
                 {

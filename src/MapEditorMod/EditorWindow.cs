@@ -78,6 +78,10 @@ namespace MapEditorMod
                 Plugin.CfgForceWindowed.Value, v => Plugin.CfgForceWindowed.Value = v);
             UiFactory.FixHeight(windowed, 24f);
 
+            var layersConfig = UiFactory.Button(list, "Configure map layers",
+                () => Plugin.ShowMapLayersWindow());
+            UiFactory.FixHeight(layersConfig, 28f);
+
             var hint = UiFactory.Label(list,
                 $"Toggle window: {Plugin.CfgWindowKey.Value} — guard/inmate cap: {Plugin.CfgGuardInmateCap.Value}", 11);
             UiFactory.FixHeight(hint, 20f);

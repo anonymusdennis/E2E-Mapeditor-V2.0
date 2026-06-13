@@ -35,9 +35,17 @@ namespace MapEditorMod
         internal static ConfigEntry<bool> CfgLockCameraPan;
         internal static ConfigEntry<bool> CfgVanillaFallback;
         internal static ConfigEntry<string> CfgSkipVersion;
+        internal static ConfigEntry<bool> CfgXRay;
+        internal static ConfigEntry<bool> CfgFenceOverlay;
+        internal static ConfigEntry<bool> CfgTriggerArrows;
+        internal static ConfigEntry<float> CfgQuickPanelX;
+        internal static ConfigEntry<float> CfgQuickPanelY;
+        internal static ConfigEntry<bool> CfgQuickPanelCollapsed;
 
         private readonly EditorWindow _window = new EditorWindow();
         private readonly QuickPanel _quickPanel = new QuickPanel();
+        private readonly ConnectedBrushWindow _connectedBrushWindow = new ConnectedBrushWindow();
+        private readonly MapLayersWindow _mapLayersWindow = new MapLayersWindow();
         private readonly HoverTooltip _tooltip = new HoverTooltip();
         private WebUi.WebUiServer _webUi;
         private bool _inEditor;
@@ -57,13 +65,20 @@ namespace MapEditorMod
             E2EApi.Features.Triggers.Initialise();
             E2EApi.Features.ModTiles.Initialise();
             E2EApi.Features.AnimatedModTiles.Initialise();
+            E2EApi.Features.MapGeometry.Initialise();
             E2EApi.Persistence.VanillaFallback.Initialise();
 
-            GameEvents.LevelLoaded += () => Log.LogInfo("level loaded");
+            GameEvents.LevelLoaded += () =>
+            {
+                Log.LogInfo("level loaded");
+                GeometryCompatDialog.MaybeShow();
+            };
             GameEvents.EditorEntered += OnEditorEntered;
             GameEvents.EditorExited += OnEditorExited;
             GameEvents.PlaytestStarted += OnPlaytestStarted;
             GameEvents.PlaytestEnded += OnPlaytestEnded;
+            _connectedBrushWindow.Initialise();
+            _mapLayersWindow.Initialise();
 
             _webUi = new WebUi.WebUiServer(CfgWebUiPort.Value);
             try
@@ -107,6 +122,22 @@ namespace MapEditorMod
             }
         }
 
+        internal static void ShowConnectedBrushWindow()
+        {
+            if (Instance != null)
+            {
+                Instance._connectedBrushWindow.Show();
+            }
+        }
+
+        internal static void ShowMapLayersWindow()
+        {
+            if (Instance != null)
+            {
+                Instance._mapLayersWindow.Show();
+            }
+        }
+
         private void Start()
         {
             if (CfgForceWindowed.Value)
@@ -133,6 +164,8 @@ namespace MapEditorMod
             bool editorActive = _inEditor && GameEvents.IsEditorActive;
             if (editorActive)
             {
+                MapGeometry.SyncEditorLayers();
+                EditorCamera.MaintainLock();
                 EditorTools.Tick();
             }
             if (editorActive && _window.IsCreated)
@@ -164,6 +197,8 @@ namespace MapEditorMod
             _quickPanel.Show();
             E2EApi.Editor.EditorCamera.ExtendZoom(CfgExtraZoomSteps.Value);
             E2EApi.Editor.EditorCamera.ApplyLock();
+            GeometryCompatDialog.MaybeShow();
+            VirtualLayerListUi.Refresh();
             if (CfgWebUiAutoOpen.Value && !_browserOpened)
             {
                 _browserOpened = true;
@@ -178,6 +213,8 @@ namespace MapEditorMod
             EditorTools.SetMode(EditorToolMode.None);
             TileSelector.Clear();
             _quickPanel.Hide();
+            _connectedBrushWindow.Hide();
+            _mapLayersWindow.Hide();
             _window.Hide();
         }
 
@@ -193,6 +230,8 @@ namespace MapEditorMod
             TileSelector.Clear();
             VanillaEditor.SetBrushVisible(false);     // …but keep the brush hidden in play
             _quickPanel.Hide();
+            _connectedBrushWindow.Hide();
+            _mapLayersWindow.Hide();
             _window.Hide();
             VanillaEditor.SetEditorUiVisible(false);
         }
@@ -263,10 +302,10 @@ namespace MapEditorMod
                 "Display", "ForceWindowed", true,
                 "Switch the game to windowed mode on startup.");
             CfgWindowedWidth = Config.Bind(
-                "Display", "WindowedWidth", 1600,
+                "Display", "WindowedWidth", 0,
                 "Window width when ForceWindowed is on (0 = keep current).");
             CfgWindowedHeight = Config.Bind(
-                "Display", "WindowedHeight", 900,
+                "Display", "WindowedHeight", 0,
                 "Window height when ForceWindowed is on (0 = keep current).");
             CfgWindowKey = Config.Bind(
                 "UI", "WindowToggleKey", KeyCode.F10,
@@ -306,6 +345,25 @@ namespace MapEditorMod
                 "Updates", "SkipVersion", "",
                 "Version string to suppress update prompts for (set automatically by 'Do not ask for this release').");
 
+            CfgXRay = Config.Bind(
+                "Editor", "XRayHiddenBlocks", false,
+                "Show hidden / below-layer blocks through floors (X-ray).");
+            CfgFenceOverlay = Config.Bind(
+                "Editor", "ElectricFenceOverlay", true,
+                "Draw the electric-fence overlay in the level editor.");
+            CfgTriggerArrows = Config.Bind(
+                "Editor", "ShowLogicArrows", false,
+                "Draw arrows between logic switches and linked tiles.");
+            CfgQuickPanelX = Config.Bind(
+                "UI", "QuickPanelX", -8f,
+                "Quick panel horizontal offset from the top-right corner (pixels).");
+            CfgQuickPanelY = Config.Bind(
+                "UI", "QuickPanelY", -8f,
+                "Quick panel vertical offset from the top-right corner (pixels).");
+            CfgQuickPanelCollapsed = Config.Bind(
+                "UI", "QuickPanelCollapsed", false,
+                "Whether the in-game E2E tools panel starts minimized.");
+
             Config.SettingChanged += (_, _2) => ApplyConfig();
         }
 
@@ -318,10 +376,10 @@ namespace MapEditorMod
             Limits.SetGuardInmateAvailability(CfgGuardInmateCap.Value);
             EditorCamera.LockPan = CfgLockCameraPan.Value;
             E2EApi.Persistence.VanillaFallback.Enabled = CfgVanillaFallback.Value;
-            if (CfgIgnoreAllRestrictions.Value)
-            {
-                Restrictions.IgnoreAll = true;
-            }
+            Restrictions.IgnoreAll = CfgIgnoreAllRestrictions.Value;
+            XRay.Enabled = CfgXRay.Value;
+            FenceOverlay.Enabled = CfgFenceOverlay.Value;
+            TriggerArrows.Enabled = CfgTriggerArrows.Value;
         }
     }
 
@@ -329,6 +387,6 @@ namespace MapEditorMod
     {
         public const string Guid = "org.anonymusdennis.e2e.mapeditor";
         public const string Name = "E2E Map Editor";
-        public const string Version = "2.0.0";
+        public const string Version = "2.1.0";
     }
 }

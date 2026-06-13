@@ -14,6 +14,7 @@ namespace E2EApi.UI
         public RectTransform Root { get; private set; }
         public RectTransform Content { get; private set; }
         public Text TitleText { get; private set; }
+        public Vector2 MinSize = new Vector2(260f, 180f);
 
         private static Canvas _canvas;
 
@@ -97,6 +98,22 @@ namespace E2EApi.UI
             window.Content.offsetMin = new Vector2(4f, 4f);
             window.Content.offsetMax = new Vector2(-4f, -32f);
 
+            var resizeGo = new GameObject("ResizeHandle");
+            resizeGo.transform.SetParent(winGo.transform, false);
+            var resizeRect = resizeGo.AddComponent<RectTransform>();
+            resizeRect.anchorMin = new Vector2(1f, 0f);
+            resizeRect.anchorMax = new Vector2(1f, 0f);
+            resizeRect.pivot = new Vector2(1f, 0f);
+            resizeRect.sizeDelta = new Vector2(18f, 18f);
+            resizeRect.anchoredPosition = Vector2.zero;
+            var resizeImage = resizeGo.AddComponent<Image>();
+            resizeImage.color = new Color(0.32f, 0.32f, 0.42f, 0.9f);
+            var resizeText = MakeText(resizeGo.transform, "/", 12, TextAnchor.MiddleCenter);
+            resizeText.raycastTarget = false;
+            Stretch(resizeText.rectTransform);
+            var resize = resizeGo.AddComponent<ResizeHandle>();
+            resize.Window = window;
+
             return window;
         }
 
@@ -139,6 +156,28 @@ namespace E2EApi.UI
             public void OnDrag(PointerEventData eventData)
             {
                 Target.position = eventData.position + _offset;
+            }
+        }
+
+        /// <summary>Bottom-right resize handle for overlay windows.</summary>
+        private class ResizeHandle : MonoBehaviour, IBeginDragHandler, IDragHandler
+        {
+            public ModWindow Window;
+            private Vector2 _startSize;
+            private Vector2 _startPointer;
+
+            public void OnBeginDrag(PointerEventData eventData)
+            {
+                _startSize = Window.Root.sizeDelta;
+                _startPointer = eventData.position;
+            }
+
+            public void OnDrag(PointerEventData eventData)
+            {
+                Vector2 delta = eventData.position - _startPointer;
+                float width = Mathf.Max(Window.MinSize.x, _startSize.x + delta.x);
+                float height = Mathf.Max(Window.MinSize.y, _startSize.y - delta.y);
+                Window.Root.sizeDelta = new Vector2(width, height);
             }
         }
     }

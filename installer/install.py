@@ -167,6 +167,20 @@ def _patch_run_bepinex(game_path: str):
             print("  WARNING: Could not locate LD_LIBRARY_PATH export line to patch.")
             print("  Please add the Mono path manually – see docs/user-install.md.")
 
+    # Ensure SteamAppId is set for terminal launches (doorstop needs this on Linux)
+    steam_exports = (
+        '# Required when launching from a terminal instead of the Steam Play button.\n'
+        '# Without this, doorstop fails and the game exits immediately on Linux.\n'
+        'export SteamAppId="${SteamAppId:-641990}"\n'
+        'export SteamGameId="${SteamGameId:-641990}"\n'
+    )
+    if 'SteamAppId="${SteamAppId:-641990}"' not in content:
+        marker = '# The rest is automatically handled by BepInEx'
+        if marker in content:
+            content = content.replace(marker, steam_exports + '\n' + marker)
+        else:
+            print("  WARNING: Could not locate marker to inject SteamAppId exports.")
+
     with open(script, "w") as f:
         f.write(content)
 

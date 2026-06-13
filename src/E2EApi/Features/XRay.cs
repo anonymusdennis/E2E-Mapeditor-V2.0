@@ -128,8 +128,8 @@ namespace E2EApi.Features
                     continue;
                 }
 
-                int x = index % 120;
-                int y = index / 120;
+                int x = index % Editor.Grid.NativeWidth;
+                int y = index / Editor.Grid.NativeWidth;
                 AddMarker(info, x, y, scale);
             }
         }

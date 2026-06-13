@@ -36,6 +36,9 @@ namespace E2EApi.Persistence
 
         private const string RealMapSection = "realmap";
         private const string ScratchFileName = "Level_Real.e2etmp";
+        private static string _lastScratchSource;
+        private static string _lastScratchPath;
+        private static int _lastScratchSize;
 
         // Level.dat constants (see docs/leveldat-format.md)
         private const byte ChunkEnd = 0x66;
@@ -130,7 +133,17 @@ namespace E2EApi.Persistence
                 }
                 byte[] real = Convert.FromBase64String(string.Concat(section.ToArray()));
                 string scratch = Path.Combine(dir, ScratchFileName);
+                if (string.Equals(_lastScratchSource, finishedPath, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(_lastScratchPath, scratch, StringComparison.OrdinalIgnoreCase) &&
+                    _lastScratchSize == real.Length &&
+                    File.Exists(scratch) && new FileInfo(scratch).Length == real.Length)
+                {
+                    return scratch;
+                }
                 File.WriteAllBytes(scratch, real);
+                _lastScratchSource = finishedPath;
+                _lastScratchPath = scratch;
+                _lastScratchSize = real.Length;
                 Log.Info("VanillaFallback: serving real map (" + real.Length +
                     " bytes) instead of the disclaimer variant");
                 return scratch;
@@ -369,7 +382,8 @@ namespace E2EApi.Persistence
                             }
                             int x = startX + ci * charW + col;
                             int y = baseY - row;
-                            if (x > 0 && x < 119 && y > 0 && y < 119)
+                            if (x > 0 && x < Editor.Grid.NativeWidth - 1 &&
+                                y > 0 && y < Editor.Grid.NativeHeight - 1)
                             {
                                 yield return new KeyValuePair<int, int>(x, y);
                             }
