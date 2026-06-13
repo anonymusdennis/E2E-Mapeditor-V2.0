@@ -72,7 +72,7 @@ namespace E2EApi.Features
                 var go = new GameObject("E2E_ModTile");
                 var renderer = go.AddComponent<SpriteRenderer>();
                 renderer.sprite = sprite;
-                renderer.sharedMaterial = OverlayLib.SpriteMaterial;
+                renderer.sharedMaterial = OverlayLib.LitSpriteMaterial;
                 renderer.sortingOrder = (p.Decor ? DecorSortingOrder : FloorSortingOrder)
                     + p.Layer;
                 // sprite pivot is bottom-left; anchor at the tile's bottom-left corner

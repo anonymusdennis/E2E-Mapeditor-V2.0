@@ -8,6 +8,11 @@ namespace E2EApi.Features
         private static Texture2D _checker;
         private static Texture2D _outline;
         private static Material _spriteMaterial;
+        private static Material _litSpriteMaterial;
+        private static bool _litSearchAttempted;
+
+        /// <summary>Prefix used for all mod-owned GameObjects.</summary>
+        internal const string GameObjectPrefix = "E2E_";
 
         public const int SortingOrder = 31000;
 
@@ -21,6 +26,40 @@ namespace E2EApi.Features
                     _spriteMaterial = new Material(shader);
                 }
                 return _spriteMaterial;
+            }
+        }
+
+        /// <summary>
+        /// A lit sprite material that matches the vanilla map sprite rendering,
+        /// so that custom-tile stamps respond to the game's day/night lighting.
+        /// Attempts to borrow the material from an existing vanilla
+        /// <see cref="SpriteRenderer"/> in the scene so the shader is an exact
+        /// match; falls back to <c>Sprites/Diffuse</c> (Unity's built-in lit
+        /// sprite shader) when no vanilla renderer is found.
+        /// </summary>
+        public static Material LitSpriteMaterial
+        {
+            get
+            {
+                if (_litSpriteMaterial == null && !_litSearchAttempted)
+                {
+                    _litSearchAttempted = true;
+                    foreach (var r in Object.FindObjectsOfType<SpriteRenderer>())
+                    {
+                        if (r != null && r.sharedMaterial != null &&
+                            !r.gameObject.name.StartsWith(GameObjectPrefix))
+                        {
+                            _litSpriteMaterial = r.sharedMaterial;
+                            break;
+                        }
+                    }
+                }
+                if (_litSpriteMaterial == null)
+                {
+                    var shader = Shader.Find("Sprites/Diffuse") ?? Shader.Find("Sprites/Default");
+                    _litSpriteMaterial = new Material(shader);
+                }
+                return _litSpriteMaterial;
             }
         }
 
