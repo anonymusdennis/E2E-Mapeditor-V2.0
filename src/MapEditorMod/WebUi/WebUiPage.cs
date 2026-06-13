@@ -237,6 +237,20 @@ namespace MapEditorMod.WebUi
           Floor (under characters)</label>
         <label class='chk'><input type='radio' name='ts_mode' id='ts_mode_decor'>
           Decor (over characters)</label>
+        <label class='chk' title='When enabled, each tile painted also places the currently selected vanilla block at the same position (adds collision / gameplay behaviour)'>
+          <input type='checkbox' id='ts_spamcollision'> Stamp includes collision</label>
+        <span class='num' title='Override the tile layer for this stamp. Auto = follows the editor layer selector.'>
+          Layer
+          <select id='ts_layer' style='background:#0e0e12;border:1px solid #333;color:#eee;padding:5px 8px;border-radius:6px;font-size:12px'>
+            <option value='-1'>Auto (editor)</option>
+            <option value='0'>0 – Underground</option>
+            <option value='1'>1 – Ground</option>
+            <option value='2'>2 – Level 1</option>
+            <option value='3'>3 – Level 2</option>
+            <option value='4'>4 – Level 3</option>
+            <option value='5'>5 – Roof</option>
+          </select>
+        </span>
         <span class='num'>Zoom <input type='number' id='ts_zoom' min='1' max='4' value='2'
           onchange='atlasZoom()'></span>
         <span id='ts_sel' class='hint'>drag on the image to select tiles (32 px = 1 tile)</span>
@@ -448,6 +462,22 @@ namespace MapEditorMod.WebUi
             <label class='anim-chk'><input type='checkbox' id='anim_pingpong'>Ping-pong</label>
             <label class='anim-chk'><input type='radio' name='anim_layer' id='anim_layer_floor' checked>Floor</label>
             <label class='anim-chk'><input type='radio' name='anim_layer' id='anim_layer_decor'>Decor</label>
+            <label class='anim-chk' title='When enabled, each tile placed also places the currently selected vanilla block (adds collision / gameplay behaviour)'>
+              <input type='checkbox' id='anim_spamcollision'>Stamp includes collision</label>
+          </div>
+          <div class='anim-controls' style='margin-top:8px'>
+            <div class='anim-num' title='Override the tile layer. Auto = follows the editor layer selector.'>
+              <label>Layer</label>
+              <select id='anim_layer_sel' style='background:#0e0e12;border:1px solid #333;color:#eee;padding:5px 8px;border-radius:6px;font-size:12px'>
+                <option value='-1'>Auto (editor)</option>
+                <option value='0'>0 – Underground</option>
+                <option value='1'>1 – Ground</option>
+                <option value='2'>2 – Level 1</option>
+                <option value='3'>3 – Level 2</option>
+                <option value='4'>4 – Level 3</option>
+                <option value='5'>5 – Roof</option>
+              </select>
+            </div>
           </div>
           <div style='margin-top:8px;font-size:11px;color:#667;font-style:italic' id='anim_timing_hint'></div>
         </div>
@@ -877,8 +907,10 @@ async function armStamp() {
   const y = tsAtlas.h - (tsSel.cy * 32 + h);
   const w = tsSel.cw * 32;
   const decor = el('ts_mode_decor').checked;
+  const layer = el('ts_layer').value;
+  const spamcollision = el('ts_spamcollision').checked;
   await post(`/api/tilesets/stamp?atlas=${encodeURIComponent(tsAtlas.name)}` +
-    `&x=${x}&y=${y}&w=${w}&h=${h}&decor=${decor}`);
+    `&x=${x}&y=${y}&w=${w}&h=${h}&decor=${decor}&layer=${layer}&spamcollision=${spamcollision}`);
 }
 
 (function bindAtlasPicker() {
@@ -1071,12 +1103,14 @@ function saveAsCustomBlock() {
     const y = tsAtlas.h - (tsSel.cy * 32 + h);
     const w = tsSel.cw * 32;
     const decor = el('ts_mode_decor').checked;
+    const layer = parseInt(el('ts_layer').value, 10);
+    const spamcollision = el('ts_spamcollision').checked;
     const category = prefs.customCategoryName || 'Custom';
     prefs.customBlocks = prefs.customBlocks || [];
     prefs.customBlocks.push({
       name, desc, category,
       atlas: tsAtlas.name, atlasH: tsAtlas.h,
-      x, y, w, h, decor
+      x, y, w, h, decor, layer, spamcollision
     });
     savePrefs();
     renderCustomBlocks();
@@ -1087,8 +1121,10 @@ function saveAsCustomBlock() {
 async function brushCustomBlock(i) {
   const cb = (prefs.customBlocks || [])[i];
   if (!cb) return;
+  const layer = (cb.layer !== undefined && cb.layer !== null) ? cb.layer : -1;
+  const spamcollision = !!cb.spamcollision;
   const r = await post(
-    `/api/tilesets/stamp?atlas=${encodeURIComponent(cb.atlas)}&x=${cb.x}&y=${cb.y}&w=${cb.w}&h=${cb.h}&decor=${cb.decor}`
+    `/api/tilesets/stamp?atlas=${encodeURIComponent(cb.atlas)}&x=${cb.x}&y=${cb.y}&w=${cb.w}&h=${cb.h}&decor=${cb.decor}&layer=${layer}&spamcollision=${spamcollision}`
   );
   if (r.ok || r.msg) {
     customSelectedId = i;
@@ -1184,7 +1220,10 @@ function cbTipShow(ev, i) {
   const rows = [];
   rows.push(`<b>${esc(cb.name)}</b> <span class='meta'>custom block</span>`);
   rows.push(`<span class='meta'>atlas:</span> ${esc(cb.atlas)}`);
-  rows.push(`<span class='meta'>region:</span> ${cb.w/32}×${cb.h/32} tile(s) — ${cb.decor?'decor (over characters)':'floor (under characters)'}`);
+  const layerStr = (cb.layer !== undefined && cb.layer !== null && cb.layer >= 0)
+    ? `layer ${cb.layer}` : 'auto-layer';
+  rows.push(`<span class='meta'>region:</span> ${cb.w/32}×${cb.h/32} tile(s) — ${cb.decor?'decor (over characters)':'floor (under characters)'} — ${layerStr}`);
+  if (cb.spamcollision) rows.push(`<span class='meta'>collision:</span> includes vanilla block`);
   if (cb.desc) rows.push(esc(cb.desc));
   const tip = el('tip');
   tip.innerHTML = rows.join('<br>');
@@ -1198,7 +1237,10 @@ function animTipShow(ev, i) {
   const rows = [];
   rows.push(`<b>${esc(def.name)}</b> <span class='meta'>animated tile</span>`);
   rows.push(`<span class='meta'>frames:</span> ${def.frames.length} @ ${def.fps} fps${def.pingpong?' (ping-pong)':''}`);
-  rows.push(`<span class='meta'>layer:</span> ${def.decor?'decor':'floor'}`);
+  const layerStr = (def.layer !== undefined && def.layer !== null && def.layer >= 0)
+    ? `layer ${def.layer}` : 'auto-layer';
+  rows.push(`<span class='meta'>layer:</span> ${def.decor?'decor':'floor'} — ${layerStr}`);
+  if (def.spamcollision) rows.push(`<span class='meta'>collision:</span> includes vanilla block`);
   if (def.desc) rows.push(esc(def.desc));
   const tip = el('tip');
   tip.innerHTML = rows.join('<br>');
@@ -1239,6 +1281,8 @@ function openAnimEditorEmpty() {
   el('anim_loop').checked = true;
   el('anim_pingpong').checked = false;
   el('anim_layer_floor').checked = true;
+  el('anim_spamcollision').checked = false;
+  el('anim_layer_sel').value = '-1';
   el('anim_save_err').style.display = 'none';
   el('anim_detect_status').style.display = 'none';
   if (tsAtlas) el('anim_src_atlas').textContent = tsAtlas.name;
@@ -1499,11 +1543,13 @@ function saveAnimBlock() {
   const loop = el('anim_loop').checked;
   const pingpong = el('anim_pingpong').checked;
   const decor = el('anim_layer_decor').checked;
+  const layer = parseInt(el('anim_layer_sel').value, 10);
+  const spamcollision = el('anim_spamcollision').checked;
   const cat = el('anim_cat_field').value.trim() || 'animated';
   const desc = el('anim_desc_field').value.trim();
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   prefs.animatedDefs = prefs.animatedDefs || [];
-  prefs.animatedDefs.push({ id, name, desc, category: cat, fps, loop, pingpong, decor, frames: animFrames.map(f => ({...f})) });
+  prefs.animatedDefs.push({ id, name, desc, category: cat, fps, loop, pingpong, decor, layer, spamcollision, frames: animFrames.map(f => ({...f})) });
   savePrefs();
   renderCustomBlocks();
   msg(`Saved animated tile ""${name}"" to category ""${cat}""`);
@@ -1515,8 +1561,10 @@ async function brushAnimBlock(i) {
   if (!def || def.frames.length === 0) return;
   // serialize frames for the API: atlas:rx:ry:rw:rh;...
   const framesParam = def.frames.map(f => `${f.atlas}:${f.x}:${f.y}:${f.w}:${f.h}`).join(';');
+  const layer = (def.layer !== undefined && def.layer !== null) ? def.layer : -1;
+  const spamcollision = !!def.spamcollision;
   const r = await (await fetch(
-    `/api/tilesets/arm-animated?fps=${def.fps}&loop=${def.loop?1:0}&pingpong=${def.pingpong?1:0}&decor=${def.decor?1:0}&frames=${encodeURIComponent(framesParam)}`,
+    `/api/tilesets/arm-animated?fps=${def.fps}&loop=${def.loop?1:0}&pingpong=${def.pingpong?1:0}&decor=${def.decor?1:0}&layer=${layer}&spamcollision=${spamcollision}&frames=${encodeURIComponent(framesParam)}`,
     {method:'POST'}
   )).json();
   if (r.ok || r.msg) {

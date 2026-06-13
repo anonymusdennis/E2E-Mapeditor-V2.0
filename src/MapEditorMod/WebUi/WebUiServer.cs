@@ -319,13 +319,15 @@ namespace MapEditorMod.WebUi
                     int sw = GetInt(query, "w", 0);
                     int sh = GetInt(query, "h", 0);
                     bool decor = GetBool(query, "decor");
+                    int stampLayer = GetInt(query, "layer", -1);
+                    bool spamCollision = GetBool(query, "spamcollision");
                     if (atlas.Length == 0 || sx < 0 || sy < 0 || sw <= 0 || sh <= 0)
                     {
                         body = Encoding.UTF8.GetBytes("{\"ok\":false,\"msg\":\"bad stamp\"}");
                         return 400;
                     }
                     body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
-                        ArmStamp(atlas, sx, sy, sw, sh, decor)));
+                        ArmStamp(atlas, sx, sy, sw, sh, decor, stampLayer, spamCollision)));
                     return 200;
                 }
                 if (method == "POST" && path == "/api/tiles/place")
@@ -573,7 +575,10 @@ namespace MapEditorMod.WebUi
                 sb.Append("{\"atlas\":").Append(Quote(stamp.Atlas))
                   .Append(",\"x\":").Append(stamp.X).Append(",\"y\":").Append(stamp.Y)
                   .Append(",\"w\":").Append(stamp.W).Append(",\"h\":").Append(stamp.H)
-                  .Append(",\"decor\":").Append(stamp.Decor ? "true" : "false").Append("}");
+                  .Append(",\"decor\":").Append(stamp.Decor ? "true" : "false")
+                  .Append(",\"layer\":").Append(stamp.Layer)
+                  .Append(",\"spamcollision\":").Append(stamp.SpamIncludesCollision ? "true" : "false")
+                  .Append("}");
             }
             else
             {
@@ -709,7 +714,8 @@ namespace MapEditorMod.WebUi
             }
         }
 
-        private static string ArmStamp(string atlas, int x, int y, int w, int h, bool decor)
+        private static string ArmStamp(string atlas, int x, int y, int w, int h, bool decor,
+            int layer = -1, bool spamCollision = false)
         {
             if (!TileSets.HasAtlas(atlas))
             {
@@ -723,6 +729,8 @@ namespace MapEditorMod.WebUi
                 W = w,
                 H = h,
                 Decor = decor,
+                Layer = layer,
+                SpamIncludesCollision = spamCollision,
             };
             EditorTools.SetMode(EditorToolMode.PaintTile);
             return "{\"ok\":true,\"msg\":" + Quote("stamp armed — " + EditorTools.HintText()) + "}";
@@ -802,6 +810,8 @@ namespace MapEditorMod.WebUi
             bool decor = GetBool(query, "decor");
             string name = Get(query, "name");
             string framesParam = Get(query, "frames");
+            int animLayer = GetInt(query, "layer", -1);
+            bool spamCollision = GetBool(query, "spamcollision");
 
             if (string.IsNullOrEmpty(framesParam))
             {
@@ -828,6 +838,8 @@ namespace MapEditorMod.WebUi
                 PingPong = pingPong,
                 Decor = decor,
                 Name = name,
+                Layer = animLayer,
+                SpamIncludesCollision = spamCollision,
             };
             EditorTools.SetMode(EditorToolMode.PaintAnimatedTile);
             return "{\"ok\":true,\"msg\":" +

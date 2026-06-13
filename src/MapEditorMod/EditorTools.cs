@@ -24,6 +24,17 @@ namespace MapEditorMod
         public string Atlas;
         public int X, Y, W, H; // atlas pixel rect, bottom-left origin
         public bool Decor;
+        /// <summary>
+        /// Layer override (-1 = follow the editor's current layer).
+        /// 0=Underground … 5=Roof.
+        /// </summary>
+        public int Layer = -1;
+        /// <summary>
+        /// When true, each stamp placement also places the currently
+        /// selected vanilla block at the same position (adds collision /
+        /// gameplay behaviour alongside the visual tile).
+        /// </summary>
+        public bool SpamIncludesCollision;
 
         public int WTiles => (W + 31) / 32;
         public int HTiles => (H + 31) / 32;
@@ -38,6 +49,10 @@ namespace MapEditorMod
         public bool PingPong;
         public bool Decor;
         public string Name = "";
+        /// <summary>Layer override (-1 = follow the editor's current layer).</summary>
+        public int Layer = -1;
+        /// <summary>When true, each placement also places the current vanilla brush block.</summary>
+        public bool SpamIncludesCollision;
 
         public int WTiles => Frames != null && Frames.Count > 0
             ? (Frames[0].Rw + 31) / 32 : 1;
@@ -130,15 +145,21 @@ namespace MapEditorMod
                         ? "click the SWITCH tile first"
                         : $"switch ({SwitchX},{SwitchY}) — click fence tiles to link, Esc resets";
                 case EditorToolMode.PaintTile:
-                    return Stamp == null
-                        ? "pick a stamp in the Tilesets tab first"
-                        : $"LMB stamps {Stamp.WTiles}x{Stamp.HTiles} tile(s) ({(Stamp.Decor ? "over" : "under")} characters){selHint}";
+                    if (Stamp == null) return "pick a stamp in the Tilesets tab first";
+                    {
+                        string layerInfo = Stamp.Layer >= 0 ? $" layer {Stamp.Layer}" : " auto-layer";
+                        string collInfo = Stamp.SpamIncludesCollision ? " +collision" : "";
+                        return $"LMB stamps {Stamp.WTiles}x{Stamp.HTiles} tile(s) ({(Stamp.Decor ? "over" : "under")} characters,{layerInfo}{collInfo}){selHint}";
+                    }
                 case EditorToolMode.EraseTile:
                     return "click modded tiles to remove them";
                 case EditorToolMode.PaintAnimatedTile:
-                    return AnimatedStamp == null
-                        ? "pick an animated tile from the building blocks first"
-                        : $"LMB places animated tile \"{AnimatedStamp.Name}\" {AnimatedStamp.WTiles}x{AnimatedStamp.HTiles} ({AnimatedStamp.Frames.Count} frames @ {AnimatedStamp.Fps:0.#} FPS){selHint}";
+                    if (AnimatedStamp == null) return "pick an animated tile from the building blocks first";
+                    {
+                        string aLayerInfo = AnimatedStamp.Layer >= 0 ? $" layer {AnimatedStamp.Layer}" : " auto-layer";
+                        string aCollInfo = AnimatedStamp.SpamIncludesCollision ? " +collision" : "";
+                        return $"LMB places animated tile \"{AnimatedStamp.Name}\" {AnimatedStamp.WTiles}x{AnimatedStamp.HTiles} ({AnimatedStamp.Frames.Count} frames @ {AnimatedStamp.Fps:0.#} FPS,{aLayerInfo}{aCollInfo}){selHint}";
+                    }
                 case EditorToolMode.EraseAnimatedTile:
                     return "click animated tiles to remove them";
                 default:
@@ -267,9 +288,18 @@ namespace MapEditorMod
             }
             _lastStampX = x;
             _lastStampY = y;
-            int layer = Grid.CurrentEditorLayer;
-            ModTiles.Place(x, y, layer < 0 ? 1 : layer, Stamp.Decor,
+            int layer = Stamp.Layer >= 0 ? Stamp.Layer
+                : (Grid.CurrentEditorLayer < 0 ? 1 : Grid.CurrentEditorLayer);
+            ModTiles.Place(x, y, layer, Stamp.Decor,
                 Stamp.Atlas, Stamp.X, Stamp.Y, Stamp.W, Stamp.H);
+            if (Stamp.SpamIncludesCollision)
+            {
+                int brush = Blocks.CurrentBrush;
+                if (brush >= 0)
+                {
+                    Placement.PlaceBlock(brush, x, y);
+                }
+            }
         }
 
         private static void TickEraseTile()
@@ -308,11 +338,20 @@ namespace MapEditorMod
             if (x == _lastAnimStampX && y == _lastAnimStampY) return;
             _lastAnimStampX = x;
             _lastAnimStampY = y;
-            int layer = Grid.CurrentEditorLayer;
-            AnimatedModTiles.Place(x, y, layer < 0 ? 1 : layer,
+            int layer = AnimatedStamp.Layer >= 0 ? AnimatedStamp.Layer
+                : (Grid.CurrentEditorLayer < 0 ? 1 : Grid.CurrentEditorLayer);
+            AnimatedModTiles.Place(x, y, layer,
                 AnimatedStamp.Decor, AnimatedStamp.Fps,
                 AnimatedStamp.Loop, AnimatedStamp.PingPong,
                 AnimatedStamp.Frames);
+            if (AnimatedStamp.SpamIncludesCollision)
+            {
+                int brush = Blocks.CurrentBrush;
+                if (brush >= 0)
+                {
+                    Placement.PlaceBlock(brush, x, y);
+                }
+            }
         }
 
         private static void TickEraseAnimatedTile()
