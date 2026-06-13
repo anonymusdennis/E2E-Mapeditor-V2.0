@@ -174,6 +174,7 @@ namespace MapEditorMod
             Log.LogInfo("level editor exited");
             _inEditor = false;
             EditorTools.SetMode(EditorToolMode.None);
+            TileSelector.Clear();
             _quickPanel.Hide();
             _window.Hide();
         }
@@ -187,6 +188,7 @@ namespace MapEditorMod
         {
             Log.LogInfo("playtest started — hiding editor artifacts");
             EditorTools.SetMode(EditorToolMode.None); // also clears mouse suppression
+            TileSelector.Clear();
             VanillaEditor.SetBrushVisible(false);     // …but keep the brush hidden in play
             _quickPanel.Hide();
             _window.Hide();

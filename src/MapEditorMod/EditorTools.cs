@@ -44,6 +44,8 @@ namespace MapEditorMod
         /// <summary>Stamp used by PaintTile (set from the web UI before arming).</summary>
         public static TileStamp Stamp;
 
+        private const float RotationStep = 11.25f;
+
         private static bool _arrowsWereEnabled;
         private static bool _fenceOverlayWasEnabled;
 
@@ -92,6 +94,9 @@ namespace MapEditorMod
 
         public static string HintText()
         {
+            string selHint = TileSelector.Count > 0
+                ? $" [{TileSelector.Count} selected — Q/E rotate]"
+                : " [hover tile + Q/E to rotate; Shift-drag or Ctrl-click to select]";
             switch (Mode)
             {
                 case EditorToolMode.PaintElectric:
@@ -105,17 +110,21 @@ namespace MapEditorMod
                 case EditorToolMode.PaintTile:
                     return Stamp == null
                         ? "pick a stamp in the Tilesets tab first"
-                        : $"LMB stamps {Stamp.WTiles}x{Stamp.HTiles} tile(s) ({(Stamp.Decor ? "over" : "under")} characters)";
+                        : $"LMB stamps {Stamp.WTiles}x{Stamp.HTiles} tile(s) ({(Stamp.Decor ? "over" : "under")} characters){selHint}";
                 case EditorToolMode.EraseTile:
                     return "click modded tiles to remove them";
                 default:
-                    return "";
+                    return selHint.TrimStart();
             }
         }
 
         /// <summary>Call every frame while the level editor is open.</summary>
         public static void Tick()
         {
+            // Selection and rotation are available in all tool modes
+            TickSelection();
+            TickRotation();
+
             switch (Mode)
             {
                 case EditorToolMode.PaintElectric:
@@ -138,6 +147,56 @@ namespace MapEditorMod
                     UpdateBrushCursor(new Color(1f, 0.45f, 0.1f, 0.95f));
                     TickEraseTile();
                     break;
+            }
+        }
+
+        private static void TickSelection()
+        {
+            // Selection input is only active when no exclusive tool is running,
+            // so it does not interfere with electricity paint / link / etc.
+            if (Mode == EditorToolMode.None || Mode == EditorToolMode.PaintTile)
+            {
+                TileSelector.Tick();
+            }
+        }
+
+        private static void TickRotation()
+        {
+            bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+
+            // Q = counter-clockwise (+11.25°), E = clockwise (-11.25°)
+            bool rotCCW = Input.GetKeyDown(KeyCode.Q);
+            bool rotCW  = Input.GetKeyDown(KeyCode.E);
+            if (!rotCCW && !rotCW) return;
+
+            // E is the vanilla "activate trigger" key in play mode, but here we
+            // are inside the editor so it is safe to reuse.
+            float delta = rotCCW ? RotationStep : -RotationStep;
+
+            int layer = Grid.CurrentEditorLayer < 0 ? 1 : Grid.CurrentEditorLayer;
+
+            if (TileSelector.Count > 0)
+            {
+                // Rotate every selected placement
+                foreach (var key in TileSelector.All())
+                {
+                    var p = ModTiles.GetAt(key.X, key.Y, key.Layer);
+                    if (p != null)
+                    {
+                        ModTiles.Rotate(p, delta);
+                    }
+                }
+                // Version already bumped inside Rotate() for each call; ensure a
+                // single redraw by the overlay the next frame.
+            }
+            else
+            {
+                // Rotate the tile under the cursor
+                int x, y;
+                if (Placement.GetCursorTile(out x, out y))
+                {
+                    ModTiles.RotateAt(x, y, layer, delta);
+                }
             }
         }
 
@@ -255,3 +314,4 @@ namespace MapEditorMod
         }
     }
 }
+

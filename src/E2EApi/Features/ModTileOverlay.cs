@@ -81,7 +81,7 @@ namespace E2EApi.Features
                 {
                     zOffset = p.Decor ? -0.6f : -0.45f; // editor plane sits at -50 already
                 }
-                go.transform.position = new Vector3(
+                Vector3 bottomLeft = new Vector3(
                     world.Value.x - tileSize * 0.5f,
                     world.Value.y - tileSize * 0.5f,
                     world.Value.z + zOffset);
@@ -90,7 +90,27 @@ namespace E2EApi.Features
                 {
                     renderer.color = new Color(1f, 1f, 1f, 0.45f); // dim lower layers
                 }
-                Markers.Add(go);
+
+                if (Mathf.Abs(p.Rotation) > 0.001f)
+                {
+                    // Rotate the sprite around the stamp centre using a pivot parent.
+                    float halfW = p.WTiles * tileSize * 0.5f;
+                    float halfH = p.HTiles * tileSize * 0.5f;
+                    var pivot = new GameObject("E2E_ModTilePivot");
+                    pivot.transform.position = new Vector3(
+                        bottomLeft.x + halfW,
+                        bottomLeft.y + halfH,
+                        bottomLeft.z);
+                    pivot.transform.eulerAngles = new Vector3(0f, 0f, p.Rotation);
+                    go.transform.SetParent(pivot.transform, false);
+                    go.transform.localPosition = new Vector3(-halfW, -halfH, 0f);
+                    Markers.Add(pivot);
+                }
+                else
+                {
+                    go.transform.position = bottomLeft;
+                    Markers.Add(go);
+                }
             }
         }
 
