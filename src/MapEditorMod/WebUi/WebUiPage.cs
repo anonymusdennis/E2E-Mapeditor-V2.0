@@ -185,7 +185,7 @@ namespace MapEditorMod.WebUi
         <button id='ts_arm' onclick='armStamp()' disabled>🖌 Paint this stamp</button>
         <button id='ts_save_block' onclick='saveAsCustomBlock()' disabled>⊕ Save as building block</button>
         <button id='tool_tileerase' onclick='setTool(""tileerase"")'>✕ Erase modded tiles</button>
-        <button class='danger' onclick='post(""/api/tiles/clear"")'>Clear ALL modded tiles</button>
+        <button class='danger' onclick='confirm(""Do you really want to delete all custom tilesets?"") && post(""/api/tiles/clear"")'>Clear ALL modded tiles</button>
       </div>
       <div style='overflow:auto;max-height:70vh;border:1px solid #3a3a4c;border-radius:8px'>
         <div id='ts_wrap' style='position:relative;display:inline-block;line-height:0'>
