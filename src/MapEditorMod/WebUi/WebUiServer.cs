@@ -365,6 +365,55 @@ namespace MapEditorMod.WebUi
                     body = Encoding.UTF8.GetBytes("{\"ok\":true}");
                     return 200;
                 }
+                // ---- animated tile routes ----
+                if (path == "/api/animated-tiles")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(GetAnimatedTilesJson));
+                    return 200;
+                }
+                if (method == "POST" && path == "/api/animated-tiles/place")
+                {
+                    body = Encoding.UTF8.GetBytes(
+                        MainThread.Run(() => PlaceAnimatedTile(query, requestBody)));
+                    return 200;
+                }
+                if (method == "POST" && path == "/api/animated-tiles/erase")
+                {
+                    int ax = GetInt(query, "x", -1);
+                    int ay = GetInt(query, "y", -1);
+                    int alayer = GetInt(query, "layer", 1);
+                    int aRemoved = MainThread.Run(() => AnimatedModTiles.EraseAt(ax, ay, alayer));
+                    body = Encoding.UTF8.GetBytes(
+                        "{\"ok\":true,\"removed\":" + aRemoved + "}");
+                    return 200;
+                }
+                if (method == "POST" && path == "/api/animated-tiles/clear")
+                {
+                    MainThread.Run(() => AnimatedModTiles.Clear());
+                    body = Encoding.UTF8.GetBytes("{\"ok\":true}");
+                    return 200;
+                }
+                if (method == "POST" && path == "/api/tilesets/arm-animated")
+                {
+                    body = Encoding.UTF8.GetBytes(
+                        MainThread.Run(() => ArmAnimatedStamp(query, requestBody)));
+                    return 200;
+                }
+                if (path == "/api/tilesets/atlas-frame-check")
+                {
+                    // Pure file I/O: checks whether an atlas region has any
+                    // non-transparent pixels (used by auto-detect as server fallback).
+                    string afcAtlas = Get(query, "name");
+                    int afcX = GetInt(query, "x", 0);
+                    int afcY = GetInt(query, "y", 0);
+                    int afcW = GetInt(query, "w", 32);
+                    int afcH = GetInt(query, "h", 32);
+                    bool hasContent = MainThread.Run(
+                        () => TileSets.RegionHasContent(afcAtlas, afcX, afcY, afcW, afcH));
+                    body = Encoding.UTF8.GetBytes(
+                        "{\"hasContent\":" + (hasContent ? "true" : "false") + "}");
+                    return 200;
+                }
                 if (path == "/api/dlc")
                 {
                     body = Encoding.UTF8.GetBytes(MainThread.Run(DlcContent.StatusJson));
@@ -418,6 +467,7 @@ namespace MapEditorMod.WebUi
                         ElectricFences.Clear();
                         Triggers.Clear();
                         ModTiles.Clear();
+                        AnimatedModTiles.Clear();
                     });
                     body = Encoding.UTF8.GetBytes("{\"ok\":true}");
                     return 200;
@@ -513,6 +563,7 @@ namespace MapEditorMod.WebUi
             sb.Append(",\"fences\":").Append(ElectricFences.Count);
             sb.Append(",\"triggers\":").Append(Triggers.All.Count);
             sb.Append(",\"modTiles\":").Append(ModTiles.Count);
+            sb.Append(",\"animatedTiles\":").Append(AnimatedModTiles.Count);
             sb.Append(",\"editorLayer\":").Append(Grid.CurrentEditorLayer);
             sb.Append(",\"brush\":").Append(Blocks.CurrentBrush);
             sb.Append(",\"stamp\":");
@@ -652,6 +703,8 @@ namespace MapEditorMod.WebUi
                 case EditorToolMode.LinkSwitch: return "link";
                 case EditorToolMode.PaintTile: return "tilepaint";
                 case EditorToolMode.EraseTile: return "tileerase";
+                case EditorToolMode.PaintAnimatedTile: return "animtilepaint";
+                case EditorToolMode.EraseAnimatedTile: return "animtileerase";
                 default: return "none";
             }
         }
@@ -675,6 +728,140 @@ namespace MapEditorMod.WebUi
             return "{\"ok\":true,\"msg\":" + Quote("stamp armed — " + EditorTools.HintText()) + "}";
         }
 
+        // ---- animated tile handlers ----
+
+        private static string GetAnimatedTilesJson()
+        {
+            var sb = new StringBuilder();
+            sb.Append("[");
+            bool first = true;
+            foreach (var p in AnimatedModTiles.All())
+            {
+                if (!first) sb.Append(",");
+                first = false;
+                sb.Append("{\"x\":").Append(p.X)
+                  .Append(",\"y\":").Append(p.Y)
+                  .Append(",\"layer\":").Append(p.Layer)
+                  .Append(",\"decor\":").Append(p.Decor ? "true" : "false")
+                  .Append(",\"fps\":").Append(p.Fps.ToString("0.##",
+                      System.Globalization.CultureInfo.InvariantCulture))
+                  .Append(",\"loop\":").Append(p.Loop ? "true" : "false")
+                  .Append(",\"pingPong\":").Append(p.PingPong ? "true" : "false")
+                  .Append(",\"frameCount\":").Append(p.Frames.Count)
+                  .Append("}");
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
+
+        private static string PlaceAnimatedTile(
+            Dictionary<string, string> query, string body)
+        {
+            int px = GetInt(query, "x", -1);
+            int py = GetInt(query, "y", -1);
+            int layer = GetInt(query, "layer", 1);
+            bool decor = GetBool(query, "decor");
+            float fps;
+            if (!float.TryParse(Get(query, "fps"),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out fps))
+            {
+                fps = 4f;
+            }
+            bool loop = GetBool(query, "loop");
+            bool pingPong = GetBool(query, "pingpong");
+            string framesParam = Get(query, "frames");
+
+            if (px < 0 || py < 0 || string.IsNullOrEmpty(framesParam))
+            {
+                return "{\"ok\":false,\"msg\":\"missing x, y, or frames\"}";
+            }
+
+            var frames = ParseFramesParam(framesParam);
+            if (frames.Count == 0)
+            {
+                return "{\"ok\":false,\"msg\":\"no valid frames\"}";
+            }
+
+            AnimatedModTiles.Place(px, py, layer, decor, fps, loop, pingPong, frames);
+            return "{\"ok\":true}";
+        }
+
+        private static string ArmAnimatedStamp(
+            Dictionary<string, string> query, string body)
+        {
+            float fps;
+            if (!float.TryParse(Get(query, "fps"),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out fps))
+            {
+                fps = 4f;
+            }
+            bool loop = GetBool(query, "loop");
+            bool pingPong = GetBool(query, "pingpong");
+            bool decor = GetBool(query, "decor");
+            string name = Get(query, "name");
+            string framesParam = Get(query, "frames");
+
+            if (string.IsNullOrEmpty(framesParam))
+            {
+                return "{\"ok\":false,\"msg\":\"no frames\"}";
+            }
+
+            var frames = ParseFramesParam(framesParam);
+            if (frames.Count == 0)
+            {
+                return "{\"ok\":false,\"msg\":\"no valid frames\"}";
+            }
+
+            // Validate that at least the first atlas exists
+            if (!TileSets.HasAtlas(frames[0].Atlas))
+            {
+                return "{\"ok\":false,\"msg\":\"atlas not cached: " + frames[0].Atlas + "\"}";
+            }
+
+            EditorTools.AnimatedStamp = new AnimatedTileStamp
+            {
+                Frames = frames,
+                Fps = fps,
+                Loop = loop,
+                PingPong = pingPong,
+                Decor = decor,
+                Name = name,
+            };
+            EditorTools.SetMode(EditorToolMode.PaintAnimatedTile);
+            return "{\"ok\":true,\"msg\":" +
+                Quote("animated stamp armed — " + EditorTools.HintText()) + "}";
+        }
+
+        /// <summary>
+        /// Parse the "frames" query param (format: atlas:rx:ry:rw:rh;atlas:rx:ry:rw:rh).
+        /// </summary>
+        private static List<AnimatedModTiles.AnimFrame> ParseFramesParam(string param)
+        {
+            var result = new List<AnimatedModTiles.AnimFrame>();
+            foreach (var part in param.Split(';'))
+            {
+                if (string.IsNullOrEmpty(part)) continue;
+                string[] pieces = part.Split(':');
+                if (pieces.Length < 5) continue;
+                int rx, ry, rw, rh;
+                if (!int.TryParse(pieces[pieces.Length - 4], out rx) ||
+                    !int.TryParse(pieces[pieces.Length - 3], out ry) ||
+                    !int.TryParse(pieces[pieces.Length - 2], out rw) ||
+                    !int.TryParse(pieces[pieces.Length - 1], out rh))
+                {
+                    continue;
+                }
+                string atlas = string.Join(":", pieces, 0, pieces.Length - 4);
+                result.Add(new AnimatedModTiles.AnimFrame
+                {
+                    Atlas = atlas, Rx = rx, Ry = ry, Rw = rw, Rh = rh
+                });
+            }
+            return result;
+        }
+
         private static string SetTool(string name)
         {
             EditorToolMode mode;
@@ -685,6 +872,8 @@ namespace MapEditorMod.WebUi
                 case "link": mode = EditorToolMode.LinkSwitch; break;
                 case "tilepaint": mode = EditorToolMode.PaintTile; break;
                 case "tileerase": mode = EditorToolMode.EraseTile; break;
+                case "animtilepaint": mode = EditorToolMode.PaintAnimatedTile; break;
+                case "animtileerase": mode = EditorToolMode.EraseAnimatedTile; break;
                 case "none":
                 case "": mode = EditorToolMode.None; break;
                 default:

@@ -648,6 +648,26 @@ namespace E2EApi.Editor
             return png;
         }
 
+        /// <summary>
+        /// Returns true if the atlas region (bottom-left origin, pixel coords) has
+        /// at least one pixel with alpha > 0.04 (~10/255). Used by the auto-detect animation feature.
+        /// </summary>
+        public static bool RegionHasContent(string atlasName, int x, int y, int w, int h)
+        {
+            var tex = GetAtlasTexture(atlasName);
+            if (tex == null) return false;
+            x = Mathf.Clamp(x, 0, tex.width - 1);
+            y = Mathf.Clamp(y, 0, tex.height - 1);
+            w = Mathf.Clamp(w, 1, tex.width - x);
+            h = Mathf.Clamp(h, 1, tex.height - y);
+            var pixels = tex.GetPixels(x, y, w, h);
+            foreach (var c in pixels)
+            {
+                if (c.a > 0.04f) return true;
+            }
+            return false;
+        }
+
         // ---- helpers ----
 
         /// <summary>CPU-readable copy of any texture via a RenderTexture blit.</summary>

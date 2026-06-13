@@ -39,6 +39,7 @@ namespace E2EApi
             Features.XRay.Tick();
             Features.TriggerArrows.Tick();
             Features.ModTileOverlay.Tick();
+            Features.AnimatedModTileOverlay.Tick();
         }
     }
 }

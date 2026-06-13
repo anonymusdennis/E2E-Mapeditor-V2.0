@@ -3,6 +3,7 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using E2EApi.Editor;
 using E2EApi.Events;
+using E2EApi.Features;
 using E2EApi.UI;
 using UnityEngine;
 
@@ -55,6 +56,7 @@ namespace MapEditorMod
             E2EApi.Features.ElectricFences.Initialise();
             E2EApi.Features.Triggers.Initialise();
             E2EApi.Features.ModTiles.Initialise();
+            E2EApi.Features.AnimatedModTiles.Initialise();
             E2EApi.Persistence.VanillaFallback.Initialise();
 
             GameEvents.LevelLoaded += () => Log.LogInfo("level loaded");

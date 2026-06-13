@@ -24,7 +24,7 @@ import tempfile
 # Constants
 # ---------------------------------------------------------------------------
 
-BEPINEX_WIN_URL  = "https://github.com/BepInEx/BepInEx/releases/download/v5.4.21/BepInEx_x64_5.4.21.0.zip"
+BEPINEX_WIN_URL  = "https://github.com/BepInEx/BepInEx/releases/download/v5.4.21/BepInEx_x86_5.4.21.0.zip"
 BEPINEX_UNIX_URL = "https://github.com/BepInEx/BepInEx/releases/download/v5.4.21/BepInEx_unix_5.4.21.0.zip"
 
 PLUGIN_SUBDIR = os.path.join("BepInEx", "plugins", "E2EMapEditor")

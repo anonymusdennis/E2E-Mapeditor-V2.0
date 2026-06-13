@@ -88,18 +88,79 @@ namespace MapEditorMod.WebUi
 
   /* custom building blocks section */
   #cb_section { margin-bottom:10px; }
+  .cat-section { margin-bottom:12px; }
+  .cat-hdr { display:flex; gap:8px; align-items:center; margin-bottom:6px; }
+  .cat-hdr h2 { font-size:13px; margin:0; color:#bdbdd6; text-transform:uppercase; letter-spacing:.06em; }
   #cb_hdr { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
   #cb_hdr h2 { font-size:13px; margin:0; color:#bdbdd6; text-transform:uppercase; letter-spacing:.06em; }
   #cb_grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(86px,1fr)); gap:8px; }
+  .cb_grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(86px,1fr)); gap:8px; }
   .cb_cell { background:#1c2030; border:1px solid #3a3a5c; border-radius:8px; padding:6px;
              text-align:center; cursor:pointer; position:relative; }
   .cb_cell:hover { border-color:#7a7af0; }
   .cb_cell.sel { border-color:#7fd17f; background:#1f2a1f;
                  box-shadow:0 0 0 2px rgba(127,209,127,.45), 0 0 14px rgba(127,209,127,.35); }
+  .cb_cell.anim { border-color:#3a4a6c; }
+  .cb_cell.anim:hover { border-color:#7a9af0; }
+  .cb_cell.anim.sel { border-color:#7fd1ff; background:#1a2030; }
   .cb_noicon { width:64px; height:64px; display:inline-block; line-height:64px; color:#555; font-size:26px; }
   .cb_del { position:absolute; top:3px; right:5px; color:#e09a9a; font-weight:700; cursor:pointer; font-size:11px; }
   .cb_del:hover { color:#ff6a6a; }
   .cb_sep { border:none; border-top:1px solid #2a2a38; margin:10px 0 0; }
+
+  /* animation editor overlay */
+  #anim_overlay { position:fixed; inset:0; background:rgba(0,0,0,.8); z-index:300;
+                  display:none; align-items:flex-start; justify-content:center; overflow-y:auto; }
+  #anim_overlay.show { display:flex; }
+  #anim_box { background:#1a1a26; border:1px solid #44446a; border-radius:14px;
+              padding:20px 22px; width:min(860px,96vw); margin:18px auto; }
+  #anim_box h3 { font-size:15px; margin:0 0 14px; color:#eee; display:flex; align-items:center; gap:8px; }
+  #anim_box h3 span.anim-badge { font-size:11px; background:#3a3a6a; color:#9a9ae8;
+    padding:2px 8px; border-radius:6px; font-weight:normal; letter-spacing:.04em; }
+  .anim-section { background:#111118; border:1px solid #2a2a3a; border-radius:8px;
+                  padding:10px 12px; margin-bottom:10px; }
+  .anim-section h4 { font-size:11px; color:#7a7ab0; text-transform:uppercase; letter-spacing:.06em;
+                     margin:0 0 8px; }
+  .frame-strip { display:flex; gap:6px; padding:6px 0; overflow-x:auto; min-height:76px;
+                 align-items:center; flex-wrap:nowrap; }
+  .frame-strip::-webkit-scrollbar { height:4px; }
+  .frame-strip::-webkit-scrollbar-track { background:#111; }
+  .frame-strip::-webkit-scrollbar-thumb { background:#444; border-radius:2px; }
+  .frame-item { position:relative; border:2px solid #333345; border-radius:6px;
+                cursor:pointer; flex-shrink:0; background:#0c0c14; }
+  .frame-item:hover { border-color:#7a7af0; }
+  .frame-item.sel { border-color:#7fd17f; }
+  .frame-item canvas { display:block; border-radius:4px; }
+  .frame-idx { position:absolute; bottom:1px; left:3px; font-size:9px; color:#888;
+               background:rgba(0,0,0,.6); padding:0 3px; border-radius:2px; }
+  .frame-del { position:absolute; top:1px; right:2px; color:#e09a9a; cursor:pointer;
+               font-size:10px; font-weight:700; line-height:1; padding:1px 3px;
+               background:rgba(0,0,0,.5); border-radius:2px; }
+  .frame-del:hover { color:#ff6a6a; }
+  .frame-add-btn { width:60px; height:60px; border:2px dashed #334; border-radius:6px;
+                   display:flex; align-items:center; justify-content:center; cursor:pointer;
+                   font-size:22px; color:#446; flex-shrink:0; }
+  .frame-add-btn:hover { border-color:#6a6ab0; color:#9a9af0; }
+  #anim_preview_canvas { border:1px solid #334; border-radius:6px; background:#0c0c14;
+                         image-rendering:pixelated; }
+  .anim-controls { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  .anim-num { display:flex; align-items:center; gap:5px; font-size:12px; color:#ccc; }
+  .anim-num input[type=number] { width:64px; background:#0e0e12; border:1px solid #333;
+    color:#eee; padding:4px 8px; border-radius:5px; font-size:12px; }
+  .anim-chk { display:flex; align-items:center; gap:5px; font-size:12px; color:#ccc; cursor:pointer; }
+  .anim-chk input { cursor:pointer; }
+  #anim_name_field, #anim_cat_field { width:100%; background:#0e0e14; border:1px solid #333;
+    color:#eee; padding:7px 10px; border-radius:6px; font-size:13px; font-family:inherit;
+    margin-bottom:8px; display:block; box-sizing:border-box; }
+  #anim_desc_field { width:100%; background:#0e0e14; border:1px solid #333; color:#eee;
+    padding:7px 10px; border-radius:6px; font-size:13px; font-family:inherit;
+    resize:vertical; min-height:50px; display:block; box-sizing:border-box; }
+  .anim-btns { display:flex; gap:8px; flex-wrap:wrap; }
+  .anim-btns button { font-size:12px; }
+  .anim-detect-btn { background:#26264a; border-color:#4a4a80; }
+  .anim-detect-btn:hover { background:#32327a; }
+  .anim-save-btn { background:#264026; border-color:#3a6a3a; font-weight:600; }
+  .anim-save-btn:hover { background:#306030; }
 
   /* modal dialog */
   #modal_overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:200;
@@ -143,11 +204,7 @@ namespace MapEditorMod.WebUi
 <main>
   <div class='page on' id='page_blocks'>
     <div id='cb_section' style='display:none'>
-      <div id='cb_hdr'>
-        <h2 id='cb_catname'>Custom</h2>
-        <button onclick='renameCategoryPrompt()' title='Rename this category' style='padding:3px 8px;font-size:11px'>✎ Rename</button>
-      </div>
-      <div id='cb_grid'></div>
+      <div id='cb_cats'></div>
       <hr class='cb_sep'>
     </div>
     <div id='grid'></div>
@@ -155,7 +212,10 @@ namespace MapEditorMod.WebUi
 
   <div class='page' id='page_tilesets'>
     <div class='card'>
-      <h2>Content sets <span id='ts_status' style='text-transform:none;color:#8d8da8'></span></h2>
+      <h2>Content sets <span id='ts_status' style='text-transform:none;color:#8d8da8'></span>
+        <button onclick='openAnimEditorEmpty()' style='margin-left:auto;font-size:11px;padding:4px 10px'
+          title='Create animated tile from scratch'>🎬 Animate</button>
+      </h2>
       <div class='row' id='ts_sets'><span class='hint'>loading…</span></div>
       <div class='row'>
         <button onclick='harvest(""all"")'>Harvest all installed</button>
@@ -184,8 +244,10 @@ namespace MapEditorMod.WebUi
       <div class='row'>
         <button id='ts_arm' onclick='armStamp()' disabled>🖌 Paint this stamp</button>
         <button id='ts_save_block' onclick='saveAsCustomBlock()' disabled>⊕ Save as building block</button>
+        <button id='ts_open_anim' onclick='openAnimEditorFromSelection()' disabled>🎬 Create animated tile</button>
         <button id='tool_tileerase' onclick='setTool(""tileerase"")'>✕ Erase modded tiles</button>
         <button class='danger' onclick='confirm(""Do you really want to delete all custom tilesets?"") && post(""/api/tiles/clear"")'>Clear ALL modded tiles</button>
+        <button class='danger' onclick='openAnimEditorEmpty()' title='Open animation editor'>🎬 Animate tileset</button>
       </div>
       <div style='overflow:auto;max-height:70vh;border:1px solid #3a3a4c;border-radius:8px'>
         <div id='ts_wrap' style='position:relative;display:inline-block;line-height:0'>
@@ -342,6 +404,84 @@ namespace MapEditorMod.WebUi
     </div>
   </div>
 </main>
+<div id='anim_overlay' onclick='if(event.target===this)closeAnimEditor()'>
+  <div id='anim_box'>
+    <h3>🎬 Animation Editor <span class='anim-badge'>Animated Tile Creator</span></h3>
+
+    <div class='anim-section'>
+      <h4>Frames <span id='anim_frame_count' style='color:#667;font-size:10px'>(0 frames)</span></h4>
+      <div class='frame-strip' id='anim_frame_strip'>
+        <div class='frame-add-btn' onclick='addCurrentSelectionAsFrame()' title='Add current atlas selection as frame'>＋</div>
+      </div>
+      <div class='anim-btns' style='margin-top:6px'>
+        <button class='anim-detect-btn' onclick='autoDetectFrames()' id='anim_detect_btn' title='Auto-scan this atlas for repeating same-size tiles along horizontal or vertical strips'>🔍 Detect frames automatically</button>
+        <button onclick='addCurrentSelectionAsFrame()' id='anim_add_sel_btn' disabled title='Add current tileset selection as next frame'>⊕ Add current selection</button>
+        <button onclick='clearAnimFrames()' style='background:#2a1a1a;border-color:#6a2a2a'>✕ Clear all frames</button>
+      </div>
+      <div id='anim_detect_status' style='font-size:11px;color:#7a9a7a;margin-top:4px;display:none'></div>
+    </div>
+
+    <div class='anim-section'>
+      <h4>Preview</h4>
+      <div style='display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap'>
+        <div>
+          <canvas id='anim_preview_canvas' width='64' height='64'></canvas>
+          <div style='margin-top:4px;display:flex;gap:6px'>
+            <button onclick='previewAnimEditor()' id='anim_play_btn' style='font-size:11px;padding:3px 8px'>▶ Play</button>
+            <button onclick='stopAnimPreview()' id='anim_stop_btn' style='font-size:11px;padding:3px 8px'>⏹ Stop</button>
+            <span id='anim_frame_disp' style='font-size:11px;color:#777;line-height:28px'>Frame 0/0</span>
+          </div>
+        </div>
+        <div style='flex:1;min-width:200px'>
+          <div class='anim-controls'>
+            <div class='anim-num'><label>FPS</label>
+              <input type='number' id='anim_fps' min='1' max='60' value='4'
+                oninput='restartPreviewIfRunning()'>
+            </div>
+            <div class='anim-num'><label>Scale preview</label>
+              <input type='number' id='anim_preview_scale' min='1' max='8' value='2'
+                oninput='updatePreviewCanvasSize()'>
+            </div>
+          </div>
+          <div class='anim-controls' style='margin-top:8px'>
+            <label class='anim-chk'><input type='checkbox' id='anim_loop' checked>Loop</label>
+            <label class='anim-chk'><input type='checkbox' id='anim_pingpong'>Ping-pong</label>
+            <label class='anim-chk'><input type='radio' name='anim_layer' id='anim_layer_floor' checked>Floor</label>
+            <label class='anim-chk'><input type='radio' name='anim_layer' id='anim_layer_decor'>Decor</label>
+          </div>
+          <div style='margin-top:8px;font-size:11px;color:#667;font-style:italic' id='anim_timing_hint'></div>
+        </div>
+      </div>
+    </div>
+
+    <div class='anim-section'>
+      <h4>Atlas source for auto-detect</h4>
+      <div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'>
+        <span style='font-size:12px;color:#ccc'>Current atlas:</span>
+        <span id='anim_src_atlas' style='font-size:12px;color:#9a9af0;font-style:italic'>none selected</span>
+        <span style='font-size:12px;color:#777'>|</span>
+        <span style='font-size:12px;color:#ccc'>Selection:</span>
+        <span id='anim_src_sel' style='font-size:12px;color:#7fd17f;font-style:italic'>none</span>
+      </div>
+      <div style='font-size:11px;color:#556;margin-top:4px'>
+        Auto-detect scans the atlas image for non-transparent tile-sized regions adjacent to the current selection.
+        It searches in all 4 directions and adds each found frame automatically.
+      </div>
+    </div>
+
+    <div class='anim-section'>
+      <h4>Save as animated building block</h4>
+      <input type='text' id='anim_name_field' placeholder='Block name…' maxlength='80'>
+      <input type='text' id='anim_cat_field' placeholder='Category (e.g. animated, effects, custom…)' maxlength='60' value='animated'>
+      <textarea id='anim_desc_field' placeholder='Description (optional)…' maxlength='400'></textarea>
+      <div class='anim-btns'>
+        <button class='anim-save-btn' onclick='saveAnimBlock()'>💾 Save animated tile</button>
+        <button onclick='closeAnimEditor()' style='background:#1a1a2a'>Cancel</button>
+      </div>
+      <div id='anim_save_err' style='font-size:12px;color:#e09a9a;margin-top:4px;display:none'></div>
+    </div>
+  </div>
+</div>
 <div id='modal_overlay' onclick='if(event.target===this)cancelModal()'>
   <div id='modal_box'>
     <h3 id='modal_title'>Add custom building block</h3>
@@ -364,7 +504,7 @@ let selectedId = -1;                       // block currently on the editor brus
 let customSelectedId = -1;                 // index in prefs.customBlocks for active custom stamp
 let modalCallback = null;
 let activeFilters = new Set();             // ids of active built-in filter chips
-let prefs = { customFilters: [], order: [], customBlocks: [], customCategoryName: 'Custom' };
+let prefs = { customFilters: [], order: [], customBlocks: [], customCategoryName: 'Custom', animatedDefs: [] };
 let orderRank = {};                        // block id -> user rank
 let dragId = null;
 let curFloor = -1;
@@ -489,7 +629,7 @@ function sortedBlocks() {
 async function loadPrefs() {
   try {
     const p = await (await fetch('/api/prefs')).json();
-    prefs = Object.assign({ customFilters: [], order: [], customBlocks: [], customCategoryName: 'Custom' }, p);
+    prefs = Object.assign({ customFilters: [], order: [], customBlocks: [], customCategoryName: 'Custom', animatedDefs: [] }, p);
   } catch (e) { /* server unreachable — keep defaults */ }
   applyOrder(); renderFilters(); render();
   renderCustomBlocks();
@@ -680,7 +820,12 @@ function openAtlas(name, w, h) {
   el('ts_rect').style.display = 'none';
   el('ts_arm').disabled = true;
   el('ts_save_block').disabled = true;
+  el('ts_open_anim').disabled = false;
   el('ts_img').src = '/api/tilesets/atlas.png?name=' + encodeURIComponent(name);
+  // update anim editor source if it's open
+  el('anim_src_atlas').textContent = name;
+  el('anim_src_sel').textContent = 'none';
+  if (el('anim_add_sel_btn')) el('anim_add_sel_btn').disabled = true;
   atlasZoom();
   el('ts_pickcard').scrollIntoView({behavior:'smooth'});
 }
@@ -719,6 +864,9 @@ function drawSel() {
     `selection: ${tsSel.cw}×${tsSel.ch} tile(s) @ cell (${tsSel.cx},${tsSel.cy})`;
   el('ts_arm').disabled = false;
   el('ts_save_block').disabled = false;
+  // update anim editor
+  el('anim_src_sel').textContent = `${tsSel.cw}×${tsSel.ch} @ (${tsSel.cx},${tsSel.cy})`;
+  if (el('anim_add_sel_btn')) el('anim_add_sel_btn').disabled = false;
 }
 
 async function armStamp() {
@@ -838,6 +986,7 @@ async function poll() {
       (s.inEditor ? 'EDITOR' : 'menu/play') +
       (s.cursor ? ` — cursor (${s.cursor.x},${s.cursor.y})` : '') +
       ` — fences ${s.fences}, links ${s.triggers}, tiles ${s.modTiles}` +
+      (s.animatedTiles ? `, animated ${s.animatedTiles}` : '') +
       (s.missingAtlases && s.missingAtlases.length
         ? ` — ⚠ missing atlases: ${s.missingAtlases.join(', ')} (harvest their sets!)` : '') +
       (s.tool && s.tool !== 'none' ? ` — TOOL ${s.tool}: ${s.toolHint}` : '');
@@ -922,9 +1071,10 @@ function saveAsCustomBlock() {
     const y = tsAtlas.h - (tsSel.cy * 32 + h);
     const w = tsSel.cw * 32;
     const decor = el('ts_mode_decor').checked;
+    const category = prefs.customCategoryName || 'Custom';
     prefs.customBlocks = prefs.customBlocks || [];
     prefs.customBlocks.push({
-      name, desc,
+      name, desc, category,
       atlas: tsAtlas.name, atlasH: tsAtlas.h,
       x, y, w, h, decor
     });
@@ -962,31 +1112,68 @@ function deleteCustomBlock(i) {
   renderCustomBlocks();
 }
 
-function renameCategoryPrompt() {
-  const cur = prefs.customCategoryName || 'Custom';
+function renameCategoryPrompt(catName) {
+  const cur = catName || 'Custom';
   openModal('Rename category', cur, '', (name) => {
-    prefs.customCategoryName = name;
-    el('cb_catname').textContent = name;
+    // rename in static blocks
+    (prefs.customBlocks || []).forEach(cb => {
+      if ((cb.category || prefs.customCategoryName || 'Custom') === cur) cb.category = name;
+    });
+    // rename in animated defs
+    (prefs.animatedDefs || []).forEach(def => {
+      if ((def.category || 'animated') === cur) def.category = name;
+    });
+    if ((prefs.customCategoryName || 'Custom') === cur) prefs.customCategoryName = name;
     savePrefs();
+    renderCustomBlocks();
   }, true);
 }
 
 function renderCustomBlocks() {
-  const list = prefs.customBlocks || [];
+  const staticBlocks = prefs.customBlocks || [];
+  const animDefs = prefs.animatedDefs || [];
   const section = el('cb_section');
-  if (list.length === 0) { section.style.display = 'none'; return; }
+  if (staticBlocks.length === 0 && animDefs.length === 0) { section.style.display = 'none'; return; }
   section.style.display = '';
-  el('cb_catname').textContent = prefs.customCategoryName || 'Custom';
-  const q = el('q').value.toLowerCase();
-  const indices = list.map((cb, i) => i)
-    .filter(i => !q || list[i].name.toLowerCase().includes(q));
-  el('cb_grid').innerHTML = indices.map(i => {
-    const cb = list[i];
-    return `<div class='cb_cell ${i === customSelectedId ? ""sel"" : """"}' onclick='brushCustomBlock(${i})'
-         onmouseenter='cbTipShow(event,${i})' onmousemove='tipMove(event)' onmouseleave='tipHide()'>
-      <span class='cb_del' onclick='event.stopPropagation();deleteCustomBlock(${i})'>×</span>
-      <span class='cb_noicon'>🧱</span>
-      <div class='nm'>${esc(cb.name)}</div>
+  const q = (el('q') ? el('q').value : '').toLowerCase();
+
+  // gather all categories
+  const catMap = {}; // cat -> { static: [{i, cb}], anim: [{i, def}] }
+  staticBlocks.forEach((cb, i) => {
+    const cat = cb.category || prefs.customCategoryName || 'Custom';
+    if (!catMap[cat]) catMap[cat] = { static: [], anim: [] };
+    if (!q || cb.name.toLowerCase().includes(q)) catMap[cat].static.push({ i, cb });
+  });
+  animDefs.forEach((def, i) => {
+    const cat = def.category || 'animated';
+    if (!catMap[cat]) catMap[cat] = { static: [], anim: [] };
+    if (!q || def.name.toLowerCase().includes(q)) catMap[cat].anim.push({ i, def });
+  });
+
+  const cats = Object.keys(catMap);
+  el('cb_cats').innerHTML = cats.map(cat => {
+    const items = catMap[cat];
+    const staticHtml = items.static.map(({ i, cb }) => `
+      <div class='cb_cell ${i === customSelectedId ? ""sel"" : """"}' onclick='brushCustomBlock(${i})'
+           onmouseenter='cbTipShow(event,${i})' onmousemove='tipMove(event)' onmouseleave='tipHide()'>
+        <span class='cb_del' onclick='event.stopPropagation();deleteCustomBlock(${i})'>×</span>
+        <span class='cb_noicon'>🧱</span>
+        <div class='nm'>${esc(cb.name)}</div>
+      </div>`).join('');
+    const animHtml = items.anim.map(({ i, def }) => `
+      <div class='cb_cell anim ${i === animSelectedId ? ""sel"" : """"}' onclick='brushAnimBlock(${i})'
+           onmouseenter='animTipShow(event,${i})' onmousemove='tipMove(event)' onmouseleave='tipHide()'>
+        <span class='cb_del' onclick='event.stopPropagation();deleteAnimBlock(${i})'>×</span>
+        <span class='cb_noicon'>🎬</span>
+        <div class='nm'>${esc(def.name)}</div>
+        <div style='font-size:9px;color:#6688aa'>${def.frames.length}f@${def.fps}fps</div>
+      </div>`).join('');
+    return `<div class='cat-section'>
+      <div class='cat-hdr'>
+        <h2>${esc(cat)}</h2>
+        <button onclick='renameCategoryPrompt(""${esc(cat)}"")' title='Rename category' style='padding:2px 7px;font-size:11px'>✎</button>
+      </div>
+      <div class='cb_grid'>${staticHtml}${animHtml}</div>
     </div>`;
   }).join('');
 }
@@ -1004,6 +1191,358 @@ function cbTipShow(ev, i) {
   tip.style.display = 'block';
   tipMove(ev);
 }
+
+function animTipShow(ev, i) {
+  const def = (prefs.animatedDefs || [])[i];
+  if (!def) return;
+  const rows = [];
+  rows.push(`<b>${esc(def.name)}</b> <span class='meta'>animated tile</span>`);
+  rows.push(`<span class='meta'>frames:</span> ${def.frames.length} @ ${def.fps} fps${def.pingpong?' (ping-pong)':''}`);
+  rows.push(`<span class='meta'>layer:</span> ${def.decor?'decor':'floor'}`);
+  if (def.desc) rows.push(esc(def.desc));
+  const tip = el('tip');
+  tip.innerHTML = rows.join('<br>');
+  tip.style.display = 'block';
+  tipMove(ev);
+}
+
+/* ---- animation editor state ---- */
+let animFrames = [];        // [{atlas, atlasH, x, y, w, h}] pixel coords, bottom-left origin
+let animPreviewTimer = null;
+let animPreviewIdx = 0;
+let animPreviewDir = 1;
+let animSelectedId = -1;    // index in prefs.animatedDefs for active animated stamp
+
+/* helpers */
+function selToFrame() {
+  if (!tsAtlas || !tsSel) return null;
+  const w = tsSel.cw * 32, h = tsSel.ch * 32;
+  const x = tsSel.cx * 32;
+  const y = tsAtlas.h - (tsSel.cy * 32 + h);  // bottom-left
+  return { atlas: tsAtlas.name, atlasH: tsAtlas.h, x, y, w, h };
+}
+
+function animTimingHint() {
+  const fps = Math.max(1, +el('anim_fps').value || 4);
+  const n = animFrames.length;
+  if (n === 0) { el('anim_timing_hint').textContent = ''; return; }
+  const dur = (n / fps).toFixed(2);
+  el('anim_timing_hint').textContent = `${n} frame${n===1?'':'s'} × ${(1000/fps).toFixed(0)}ms = ${dur}s per cycle`;
+}
+
+function openAnimEditorEmpty() {
+  animFrames = [];
+  el('anim_name_field').value = '';
+  el('anim_cat_field').value = 'animated';
+  el('anim_desc_field').value = '';
+  el('anim_fps').value = '4';
+  el('anim_loop').checked = true;
+  el('anim_pingpong').checked = false;
+  el('anim_layer_floor').checked = true;
+  el('anim_save_err').style.display = 'none';
+  el('anim_detect_status').style.display = 'none';
+  if (tsAtlas) el('anim_src_atlas').textContent = tsAtlas.name;
+  else el('anim_src_atlas').textContent = 'none selected';
+  el('anim_src_sel').textContent = tsSel ? `${tsSel.cw}×${tsSel.ch} @ (${tsSel.cx},${tsSel.cy})` : 'none';
+  if (el('anim_add_sel_btn')) el('anim_add_sel_btn').disabled = !tsSel;
+  stopAnimPreview();
+  renderAnimFrames();
+  el('anim_overlay').classList.add('show');
+}
+
+function openAnimEditorFromSelection() {
+  openAnimEditorEmpty();
+  if (tsAtlas && tsSel) {
+    const frame = selToFrame();
+    if (frame) { animFrames = [frame]; renderAnimFrames(); }
+  }
+}
+
+function closeAnimEditor() {
+  stopAnimPreview();
+  el('anim_overlay').classList.remove('show');
+}
+
+function addCurrentSelectionAsFrame() {
+  const frame = selToFrame();
+  if (!frame) { msg('Select a region in a tileset atlas first'); return; }
+  animFrames.push(frame);
+  renderAnimFrames();
+  animTimingHint();
+}
+
+function removeAnimFrame(i) {
+  animFrames.splice(i, 1);
+  if (animPreviewIdx >= animFrames.length) animPreviewIdx = 0;
+  renderAnimFrames();
+  animTimingHint();
+}
+
+function moveAnimFrame(i, delta) {
+  const j = i + delta;
+  if (j < 0 || j >= animFrames.length) return;
+  [animFrames[i], animFrames[j]] = [animFrames[j], animFrames[i]];
+  renderAnimFrames();
+}
+
+function clearAnimFrames() {
+  if (animFrames.length > 0 && !confirm('Clear all frames?')) return;
+  animFrames = [];
+  stopAnimPreview();
+  renderAnimFrames();
+  animTimingHint();
+}
+
+function updatePreviewCanvasSize() {
+  if (animFrames.length === 0) return;
+  const f = animFrames[0];
+  const scale = Math.max(1, Math.min(8, +el('anim_preview_scale').value || 2));
+  el('anim_preview_canvas').width = f.w * scale;
+  el('anim_preview_canvas').height = f.h * scale;
+}
+
+function restartPreviewIfRunning() {
+  if (animPreviewTimer) { stopAnimPreview(); previewAnimEditor(); }
+  animTimingHint();
+}
+
+async function drawFrameToCanvas(canvas, frame) {
+  const scale = Math.max(1, Math.min(8, +el('anim_preview_scale').value || 2));
+  canvas.width = frame.w * scale;
+  canvas.height = frame.h * scale;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // load the atlas image and draw the region
+  const img = new Image();
+  img.src = '/api/tilesets/atlas.png?name=' + encodeURIComponent(frame.atlas);
+  await new Promise(res => { img.onload = res; img.onerror = res; });
+  if (!img.complete || img.naturalWidth === 0) {
+    ctx.fillStyle = '#334';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#aaa';
+    ctx.font = '10px sans-serif';
+    ctx.fillText('?', 4, 14);
+    return;
+  }
+  // frame coords are bottom-left; convert to top-left for canvas
+  const atlasH = frame.atlasH || img.naturalHeight;
+  const srcY = atlasH - frame.y - frame.h;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, frame.x, srcY, frame.w, frame.h, 0, 0, frame.w * scale, frame.h * scale);
+}
+
+function renderAnimFrames() {
+  const strip = el('anim_frame_strip');
+  const count = animFrames.length;
+  el('anim_frame_count').textContent = `(${count} frame${count===1?'':'s'})`;
+  // render frame thumbnails
+  let html = '';
+  animFrames.forEach((f, i) => {
+    html += `<div class='frame-item' id='frame_item_${i}'>
+      <canvas id='frame_canvas_${i}' width='64' height='64' title='Frame ${i+1}: ${f.atlas} ${f.w}×${f.h}'></canvas>
+      <span class='frame-idx'>${i+1}</span>
+      <span class='frame-del' onclick='removeAnimFrame(${i})' title='Remove frame'>×</span>
+      <div style='display:flex;justify-content:space-between;padding:1px 2px'>
+        <span onclick='moveAnimFrame(${i},-1)' style='cursor:pointer;color:#668;font-size:9px' title='Move left'>◀</span>
+        <span onclick='moveAnimFrame(${i},1)' style='cursor:pointer;color:#668;font-size:9px' title='Move right'>▶</span>
+      </div>
+    </div>`;
+  });
+  html += `<div class='frame-add-btn' onclick='addCurrentSelectionAsFrame()' title='Add current atlas selection as frame'>＋</div>`;
+  strip.innerHTML = html;
+  // draw each frame asynchronously
+  animFrames.forEach((f, i) => {
+    const cv = el('frame_canvas_' + i);
+    if (cv) drawFrameToCanvas(cv, f);
+  });
+  animTimingHint();
+  // update preview canvas size if no preview running
+  if (!animPreviewTimer && count > 0) {
+    const scale = Math.max(1, Math.min(8, +el('anim_preview_scale').value || 2));
+    el('anim_preview_canvas').width = animFrames[0].w * scale;
+    el('anim_preview_canvas').height = animFrames[0].h * scale;
+  }
+  el('anim_frame_disp').textContent = `Frame ${count > 0 ? animPreviewIdx+1 : 0}/${count}`;
+}
+
+function previewAnimEditor() {
+  if (animFrames.length === 0) { msg('Add at least one frame first'); return; }
+  stopAnimPreview();
+  animPreviewIdx = 0;
+  animPreviewDir = 1;
+  const fps = Math.max(1, Math.min(60, +el('anim_fps').value || 4));
+  const loop = el('anim_loop').checked;
+  const pingpong = el('anim_pingpong').checked;
+  function tick() {
+    drawFrameToCanvas(el('anim_preview_canvas'), animFrames[animPreviewIdx]);
+    el('anim_frame_disp').textContent = `Frame ${animPreviewIdx+1}/${animFrames.length}`;
+    if (pingpong) {
+      animPreviewIdx += animPreviewDir;
+      if (animPreviewIdx >= animFrames.length - 1) { animPreviewIdx = animFrames.length - 1; animPreviewDir = -1; }
+      if (animPreviewIdx <= 0) { animPreviewIdx = 0; animPreviewDir = 1; if (!loop) { stopAnimPreview(); return; } }
+    } else {
+      animPreviewIdx = (animPreviewIdx + 1);
+      if (animPreviewIdx >= animFrames.length) {
+        if (!loop) { animPreviewIdx = animFrames.length - 1; stopAnimPreview(); return; }
+        animPreviewIdx = 0;
+      }
+    }
+    animPreviewTimer = setTimeout(tick, 1000 / fps);
+  }
+  tick();
+}
+
+function stopAnimPreview() {
+  if (animPreviewTimer) { clearTimeout(animPreviewTimer); animPreviewTimer = null; }
+}
+
+async function autoDetectFrames() {
+  if (!tsAtlas || !tsSel) { msg('Select a region in a tileset atlas first to use as template frame'); return; }
+  el('anim_detect_status').style.display = 'block';
+  el('anim_detect_status').textContent = '🔍 Loading atlas image…';
+  el('anim_detect_btn').disabled = true;
+  try {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = '/api/tilesets/atlas.png?name=' + encodeURIComponent(tsAtlas.name) + '&t=' + Date.now();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+    // draw to offscreen canvas to read pixels
+    const cv = document.createElement('canvas');
+    cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    function regionHasContent(x, y, w, h) {
+      if (x < 0 || y < 0 || x + w > cv.width || y + h > cv.height) return false;
+      const d = ctx.getImageData(x, y, w, h).data;
+      // alpha threshold: >10/255 (~0.04), matching RegionHasContent in TileSets.cs
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 10) return true;
+      return false;
+    }
+    // selection in top-left canvas coords
+    const sw = tsSel.cw * 32, sh = tsSel.ch * 32;
+    const sx = tsSel.cx * 32, sy = tsSel.cy * 32;
+    const found = [];
+    // include the original selection as frame 0
+    found.push({ cx: tsSel.cx, cy: tsSel.cy });
+    // scan horizontally right
+    let cx = tsSel.cx + tsSel.cw, maxScan = Math.floor(cv.width / 32);
+    while (cx + tsSel.cw <= Math.floor(cv.width / 32) && found.length < 128) {
+      if (!regionHasContent(cx * 32, sy, sw, sh)) break;
+      found.push({ cx, cy: tsSel.cy });
+      cx += tsSel.cw;
+    }
+    // scan horizontally left (insert at beginning)
+    cx = tsSel.cx - tsSel.cw;
+    const leftFrames = [];
+    while (cx >= 0 && leftFrames.length < 64) {
+      if (!regionHasContent(cx * 32, sy, sw, sh)) break;
+      leftFrames.unshift({ cx, cy: tsSel.cy });
+      cx -= tsSel.cw;
+    }
+    // scan vertically down
+    let cy = tsSel.cy + tsSel.ch;
+    const downFrames = [];
+    while (cy + tsSel.ch <= Math.floor(cv.height / 32) && downFrames.length < 64) {
+      if (!regionHasContent(sx, cy * 32, sw, sh)) break;
+      downFrames.push({ cx: tsSel.cx, cy });
+      cy += tsSel.ch;
+    }
+    // scan vertically up
+    cy = tsSel.cy - tsSel.ch;
+    const upFrames = [];
+    while (cy >= 0 && upFrames.length < 64) {
+      if (!regionHasContent(sx, cy * 32, sw, sh)) break;
+      upFrames.unshift({ cx: tsSel.cx, cy });
+      cy -= tsSel.ch;
+    }
+    // pick best direction (most frames found)
+    const horiz = [...leftFrames, ...found];
+    const vert = [...upFrames, { cx: tsSel.cx, cy: tsSel.cy }, ...downFrames];
+    const best = horiz.length >= vert.length ? horiz : vert;
+    if (best.length < 2) {
+      el('anim_detect_status').textContent = '⚠ Only 1 frame found — try a different selection or direction.';
+      el('anim_detect_btn').disabled = false;
+      return;
+    }
+    // convert to frame objects
+    const newFrames = best.map(({ cx: fcx, cy: fcy }) => {
+      const fw = tsSel.cw * 32, fh = tsSel.ch * 32;
+      const fx = fcx * 32;
+      const fy = tsAtlas.h - (fcy * 32 + fh);  // bottom-left
+      return { atlas: tsAtlas.name, atlasH: tsAtlas.h, x: fx, y: fy, w: fw, h: fh };
+    });
+    animFrames = newFrames;
+    renderAnimFrames();
+    el('anim_detect_status').textContent = `✅ Found ${newFrames.length} frames (${best === horiz ? 'horizontal' : 'vertical'} strip).`;
+    msg(`Auto-detected ${newFrames.length} animation frames`);
+  } catch (e) {
+    el('anim_detect_status').textContent = '❌ Error: ' + e.message;
+  }
+  el('anim_detect_btn').disabled = false;
+}
+
+function saveAnimBlock() {
+  const name = el('anim_name_field').value.trim();
+  el('anim_save_err').style.display = 'none';
+  if (!name) {
+    el('anim_save_err').textContent = 'Name is required.';
+    el('anim_save_err').style.display = 'block';
+    el('anim_name_field').focus();
+    return;
+  }
+  if (animFrames.length === 0) {
+    el('anim_save_err').textContent = 'Add at least one frame before saving.';
+    el('anim_save_err').style.display = 'block';
+    return;
+  }
+  const fps = Math.max(1, Math.min(60, +el('anim_fps').value || 4));
+  const loop = el('anim_loop').checked;
+  const pingpong = el('anim_pingpong').checked;
+  const decor = el('anim_layer_decor').checked;
+  const cat = el('anim_cat_field').value.trim() || 'animated';
+  const desc = el('anim_desc_field').value.trim();
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  prefs.animatedDefs = prefs.animatedDefs || [];
+  prefs.animatedDefs.push({ id, name, desc, category: cat, fps, loop, pingpong, decor, frames: animFrames.map(f => ({...f})) });
+  savePrefs();
+  renderCustomBlocks();
+  msg(`Saved animated tile ""${name}"" to category ""${cat}""`);
+  closeAnimEditor();
+}
+
+async function brushAnimBlock(i) {
+  const def = (prefs.animatedDefs || [])[i];
+  if (!def || def.frames.length === 0) return;
+  // serialize frames for the API: atlas:rx:ry:rw:rh;...
+  const framesParam = def.frames.map(f => `${f.atlas}:${f.x}:${f.y}:${f.w}:${f.h}`).join(';');
+  const r = await (await fetch(
+    `/api/tilesets/arm-animated?fps=${def.fps}&loop=${def.loop?1:0}&pingpong=${def.pingpong?1:0}&decor=${def.decor?1:0}&frames=${encodeURIComponent(framesParam)}`,
+    {method:'POST'}
+  )).json();
+  if (r.ok || r.msg) {
+    animSelectedId = i;
+    customSelectedId = -1;
+    selectedId = -1;
+    updateSel();
+    renderCustomBlocks();
+    msg(r.msg || `armed animated: ${def.name}`);
+  }
+}
+
+function deleteAnimBlock(i) {
+  const def = (prefs.animatedDefs || [])[i];
+  if (!def) return;
+  if (!confirm(`Delete animated tile ""${def.name}""?`)) return;
+  prefs.animatedDefs.splice(i, 1);
+  if (animSelectedId === i) animSelectedId = -1;
+  else if (animSelectedId > i) animSelectedId--;
+  savePrefs();
+  renderCustomBlocks();
+}
+
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && el('anim_overlay').classList.contains('show')) closeAnimEditor();
+});
 
 el('q').addEventListener('input', () => { renderFilters(); render(); });
 renderFilters();
