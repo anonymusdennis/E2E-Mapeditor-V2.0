@@ -33,6 +33,7 @@ namespace MapEditorMod
         internal static ConfigEntry<int> CfgExtraZoomSteps;
         internal static ConfigEntry<bool> CfgLockCameraPan;
         internal static ConfigEntry<bool> CfgVanillaFallback;
+        internal static ConfigEntry<string> CfgSkipVersion;
 
         private readonly EditorWindow _window = new EditorWindow();
         private readonly QuickPanel _quickPanel = new QuickPanel();
@@ -71,6 +72,8 @@ namespace MapEditorMod
             {
                 Log.LogError($"web UI failed to start on port {CfgWebUiPort.Value}: {e.Message}");
             }
+
+            UpdateChecker.CheckAsync();
         }
 
         private void OnDestroy()
@@ -294,6 +297,10 @@ namespace MapEditorMod
                 "Level.dat for unmodded players (the real map travels in the Level.e2e sidecar and " +
                 "is restored automatically on modded clients). When off, the map saves normally and " +
                 "vanilla players simply see it without the modded tiles.");
+
+            CfgSkipVersion = Config.Bind(
+                "Updates", "SkipVersion", "",
+                "Version string to suppress update prompts for (set automatically by 'Do not ask for this release').");
 
             Config.SettingChanged += (_, _2) => ApplyConfig();
         }

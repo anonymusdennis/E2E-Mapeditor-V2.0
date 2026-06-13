@@ -19,6 +19,13 @@ cp src/E2EApi/bin/Release/E2EApi.dll "$STAGE/BepInEx/plugins/E2EMapEditor/"
 cp src/MapEditorMod/bin/Release/MapEditorMod.dll "$STAGE/BepInEx/plugins/E2EMapEditor/"
 cp docs/user-install.md "$STAGE/README-INSTALL.md"
 
+# Installer
+mkdir -p "$STAGE/installer"
+cp installer/install.py "$STAGE/installer/"
+cp installer/install.bat "$STAGE/installer/"
+cp installer/install.sh "$STAGE/installer/"
+chmod +x "$STAGE/installer/install.sh"
+
 ZIP="$OUT/E2EMapEditor-v$VERSION.zip"
 rm -f "$ZIP"
 (cd "$STAGE" && zip -qr "../$(basename "$ZIP")" .)

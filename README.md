@@ -1,5 +1,22 @@
 # E2E Mapeditor V2.0
 
+> **🚀 Quick install:** grab the latest zip from [Releases](../../releases), extract it,
+> then run the **one-click installer**:
+>
+> | Platform | How to run |
+> |----------|-----------|
+> | **Windows** | Double-click `installer\install.bat` |
+> | **Linux / Steam Deck** | `cd installer && ./install.sh` |
+>
+> The installer auto-detects your game folder, downloads the right BepInEx version,
+> and drops the mod files in the correct place — no manual steps needed.
+> To uninstall: `install.bat uninstall` / `./install.sh uninstall`
+>
+> *Think the installer should be extended or improved?
+> [Vote / comment on the issue](https://github.com/anonymusdennis/E2E-Mapeditor-V2.0/issues/5)*
+
+---
+
 A browser-based map editor extension for **The Escapists 2** (Steam, Windows and
 Linux/Steam Deck), built as a BepInEx 5 mod. It hooks into the game's built-in
 level editor and adds a full web UI plus a set of editor and gameplay features
