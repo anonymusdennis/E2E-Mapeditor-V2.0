@@ -85,6 +85,35 @@ namespace MapEditorMod.WebUi
   #tip b { color:#fff; font-size:13px; }
   #tip .meta { color:#8d8da8; }
   #tip .notes { color:#c9e3a8; margin-top:6px; display:block; }
+
+  /* custom building blocks section */
+  #cb_section { margin-bottom:10px; }
+  #cb_hdr { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  #cb_hdr h2 { font-size:13px; margin:0; color:#bdbdd6; text-transform:uppercase; letter-spacing:.06em; }
+  #cb_grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(86px,1fr)); gap:8px; }
+  .cb_cell { background:#1c2030; border:1px solid #3a3a5c; border-radius:8px; padding:6px;
+             text-align:center; cursor:pointer; position:relative; }
+  .cb_cell:hover { border-color:#7a7af0; }
+  .cb_cell.sel { border-color:#7fd17f; background:#1f2a1f;
+                 box-shadow:0 0 0 2px rgba(127,209,127,.45), 0 0 14px rgba(127,209,127,.35); }
+  .cb_noicon { width:64px; height:64px; display:inline-block; line-height:64px; color:#555; font-size:26px; }
+  .cb_del { position:absolute; top:3px; right:5px; color:#e09a9a; font-weight:700; cursor:pointer; font-size:11px; }
+  .cb_del:hover { color:#ff6a6a; }
+  .cb_sep { border:none; border-top:1px solid #2a2a38; margin:10px 0 0; }
+
+  /* modal dialog */
+  #modal_overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:200;
+                   display:none; align-items:center; justify-content:center; }
+  #modal_overlay.show { display:flex; }
+  #modal_box { background:#1c1c28; border:1px solid #3e3e5c; border-radius:12px;
+               padding:22px 26px; min-width:320px; max-width:460px; width:90vw; }
+  #modal_box h3 { font-size:14px; margin:0 0 14px; color:#eee; }
+  #modal_box input[type=text], #modal_box textarea {
+    width:100%; background:#0e0e14; border:1px solid #333; color:#eee;
+    padding:8px 10px; border-radius:6px; margin-bottom:10px;
+    font-size:13px; font-family:inherit; display:block; }
+  #modal_box textarea { resize:vertical; min-height:60px; }
+  #modal_btns { display:flex; gap:8px; justify-content:flex-end; margin-top:4px; }
 </style>
 </head>
 <body>
@@ -110,6 +139,14 @@ namespace MapEditorMod.WebUi
 
 <main>
   <div class='page on' id='page_blocks'>
+    <div id='cb_section' style='display:none'>
+      <div id='cb_hdr'>
+        <h2 id='cb_catname'>Custom</h2>
+        <button onclick='renameCategoryPrompt()' title='Rename this category' style='padding:3px 8px;font-size:11px'>✎ Rename</button>
+      </div>
+      <div id='cb_grid'></div>
+      <hr class='cb_sep'>
+    </div>
     <div id='grid'></div>
   </div>
 
@@ -143,6 +180,7 @@ namespace MapEditorMod.WebUi
       </div>
       <div class='row'>
         <button id='ts_arm' onclick='armStamp()' disabled>🖌 Paint this stamp</button>
+        <button id='ts_save_block' onclick='saveAsCustomBlock()' disabled>⊕ Save as building block</button>
         <button id='tool_tileerase' onclick='setTool(""tileerase"")'>✕ Erase modded tiles</button>
         <button class='danger' onclick='post(""/api/tiles/clear"")'>Clear ALL modded tiles</button>
       </div>
@@ -301,14 +339,28 @@ namespace MapEditorMod.WebUi
     </div>
   </div>
 </main>
+<div id='modal_overlay' onclick='if(event.target===this)cancelModal()'>
+  <div id='modal_box'>
+    <h3 id='modal_title'>Add custom building block</h3>
+    <input type='text' id='modal_name' placeholder='Name…' maxlength='80'
+           onkeydown='if(event.key===""Enter"")confirmModal()'>
+    <textarea id='modal_desc' placeholder='Description (optional)…' maxlength='400'></textarea>
+    <div id='modal_btns'>
+      <button onclick='cancelModal()'>Cancel</button>
+      <button onclick='confirmModal()' class='custom' style='background:#36366a'>Save</button>
+    </div>
+  </div>
+</div>
 <div id='tip'></div>
 
 <script>
 let blocks = [];
 let tool = 'none';
 let selectedId = -1;                       // block currently on the editor brush
+let customSelectedId = -1;                 // index in prefs.customBlocks for active custom stamp
+let modalCallback = null;
 let activeFilters = new Set();             // ids of active built-in filter chips
-let prefs = { customFilters: [], order: [] };
+let prefs = { customFilters: [], order: [], customBlocks: [], customCategoryName: 'Custom' };
 let orderRank = {};                        // block id -> user rank
 let dragId = null;
 let curFloor = -1;
@@ -433,9 +485,10 @@ function sortedBlocks() {
 async function loadPrefs() {
   try {
     const p = await (await fetch('/api/prefs')).json();
-    prefs = Object.assign({ customFilters: [], order: [] }, p);
+    prefs = Object.assign({ customFilters: [], order: [], customBlocks: [], customCategoryName: 'Custom' }, p);
   } catch (e) { /* server unreachable — keep defaults */ }
   applyOrder(); renderFilters(); render();
+  renderCustomBlocks();
 }
 let prefsTimer = null;
 function savePrefs() {
@@ -483,6 +536,7 @@ function render() {
       <div class='nm'>${b.name||('#'+b.id)}</div>
     </div>`).join('');
   msg(`${show.length}/${blocks.length} blocks`);
+  renderCustomBlocks();
 }
 
 function updateSel() {
@@ -543,7 +597,9 @@ async function brush(id) {
   const r = await (await fetch('/api/brush/' + target, {method:'POST'})).json();
   if (r.ok) {
     selectedId = target;
+    customSelectedId = -1;
     updateSel();
+    renderCustomBlocks();
     msg(target < 0 ? 'brush cleared' : 'brush set: #' + id);
   } else {
     msg('editor not open');
@@ -619,6 +675,7 @@ function openAtlas(name, w, h) {
   el('ts_pickcard').style.display = 'block';
   el('ts_rect').style.display = 'none';
   el('ts_arm').disabled = true;
+  el('ts_save_block').disabled = true;
   el('ts_img').src = '/api/tilesets/atlas.png?name=' + encodeURIComponent(name);
   atlasZoom();
   el('ts_pickcard').scrollIntoView({behavior:'smooth'});
@@ -657,6 +714,7 @@ function drawSel() {
   el('ts_sel').textContent =
     `selection: ${tsSel.cw}×${tsSel.ch} tile(s) @ cell (${tsSel.cx},${tsSel.cy})`;
   el('ts_arm').disabled = false;
+  el('ts_save_block').disabled = false;
 }
 
 async function armStamp() {
@@ -811,6 +869,120 @@ async function poll() {
     el('status').textContent = 'game not reachable';
   }
   setTimeout(poll, 1000);
+}
+
+/* ---- modal ---- */
+function openModal(title, nameVal, descVal, callback) {
+  el('modal_title').textContent = title;
+  el('modal_name').value = nameVal || '';
+  el('modal_desc').value = descVal || '';
+  modalCallback = callback;
+  el('modal_overlay').classList.add('show');
+  el('modal_name').focus();
+}
+function cancelModal() {
+  el('modal_overlay').classList.remove('show');
+  modalCallback = null;
+}
+function confirmModal() {
+  const name = el('modal_name').value.trim();
+  if (!name) { el('modal_name').focus(); return; }
+  const desc = el('modal_desc').value.trim();
+  if (modalCallback) modalCallback(name, desc);
+  cancelModal();
+}
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape' && el('modal_overlay').classList.contains('show')) cancelModal();
+});
+
+/* ---- custom building blocks ---- */
+function saveAsCustomBlock() {
+  if (!tsAtlas || !tsSel) return;
+  openModal('Add custom building block', '', '', (name, desc) => {
+    const x = tsSel.cx * 32;
+    const h = tsSel.ch * 32;
+    const y = tsAtlas.h - (tsSel.cy * 32 + h);
+    const w = tsSel.cw * 32;
+    const decor = el('ts_mode_decor').checked;
+    prefs.customBlocks = prefs.customBlocks || [];
+    prefs.customBlocks.push({
+      name, desc,
+      atlas: tsAtlas.name, atlasH: tsAtlas.h,
+      x, y, w, h, decor
+    });
+    savePrefs();
+    renderCustomBlocks();
+    msg(`saved custom block ""${name}""`);
+  });
+}
+
+async function brushCustomBlock(i) {
+  const cb = (prefs.customBlocks || [])[i];
+  if (!cb) return;
+  const r = await post(
+    `/api/tilesets/stamp?atlas=${encodeURIComponent(cb.atlas)}&x=${cb.x}&y=${cb.y}&w=${cb.w}&h=${cb.h}&decor=${cb.decor}`
+  );
+  if (r.ok || r.msg) {
+    customSelectedId = i;
+    selectedId = -1;
+    updateSel();
+    renderCustomBlocks();
+    msg(r.msg || `armed: ${cb.name}`);
+  }
+}
+
+function deleteCustomBlock(i) {
+  const cb = (prefs.customBlocks || [])[i];
+  if (!cb) return;
+  if (!confirm(`Delete custom block ""${cb.name}""?`)) return;
+  prefs.customBlocks.splice(i, 1);
+  if (customSelectedId === i) customSelectedId = -1;
+  else if (customSelectedId > i) customSelectedId--;
+  savePrefs();
+  renderCustomBlocks();
+}
+
+function renameCategoryPrompt() {
+  const cur = prefs.customCategoryName || 'Custom';
+  const newName = prompt('Category name:', cur);
+  if (!newName || !newName.trim()) return;
+  prefs.customCategoryName = newName.trim();
+  el('cb_catname').textContent = prefs.customCategoryName;
+  savePrefs();
+}
+
+function renderCustomBlocks() {
+  const list = prefs.customBlocks || [];
+  const section = el('cb_section');
+  if (list.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  el('cb_catname').textContent = prefs.customCategoryName || 'Custom';
+  const q = el('q').value.toLowerCase();
+  const indices = list.map((cb, i) => i)
+    .filter(i => !q || list[i].name.toLowerCase().includes(q));
+  el('cb_grid').innerHTML = indices.map(i => {
+    const cb = list[i];
+    return `<div class='cb_cell ${i === customSelectedId ? ""sel"" : """"}' onclick='brushCustomBlock(${i})'
+         onmouseenter='cbTipShow(event,${i})' onmousemove='tipMove(event)' onmouseleave='tipHide()'>
+      <span class='cb_del' onclick='event.stopPropagation();deleteCustomBlock(${i})'>×</span>
+      <span class='cb_noicon'>🧱</span>
+      <div class='nm'>${esc(cb.name)}</div>
+    </div>`;
+  }).join('');
+}
+
+function cbTipShow(ev, i) {
+  const cb = (prefs.customBlocks || [])[i];
+  if (!cb) return;
+  const rows = [];
+  rows.push(`<b>${esc(cb.name)}</b> <span class='meta'>custom block</span>`);
+  rows.push(`<span class='meta'>atlas:</span> ${esc(cb.atlas)}`);
+  rows.push(`<span class='meta'>region:</span> ${cb.w/32}×${cb.h/32} tile(s) — ${cb.decor?'decor (over characters)':'floor (under characters)'}`);
+  if (cb.desc) rows.push(esc(cb.desc));
+  const tip = el('tip');
+  tip.innerHTML = rows.join('<br>');
+  tip.style.display = 'block';
+  tipMove(ev);
 }
 
 el('q').addEventListener('input', () => { renderFilters(); render(); });
