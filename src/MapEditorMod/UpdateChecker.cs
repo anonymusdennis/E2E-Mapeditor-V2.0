@@ -11,6 +11,7 @@ namespace MapEditorMod
     /// </summary>
     internal static class UpdateChecker
     {
+        private const string RepoUrl = "https://github.com/anonymusdennis/E2E-Mapeditor-V2.0";
         private const string ApiUrl =
             "https://api.github.com/repos/anonymusdennis/E2E-Mapeditor-V2.0/releases/latest";
 
@@ -25,14 +26,18 @@ namespace MapEditorMod
 
         private static void CheckOnThread()
         {
+            // Save and restore the certificate callback so this update probe does
+            // not permanently affect other HTTPS connections in the process.
+            // Older Unity Mono builds may not trust the GitHub CA, so we accept
+            // the certificate only for this request.
+            var prevCallback = ServicePointManager.ServerCertificateValidationCallback;
+            var prevProtocol = ServicePointManager.SecurityProtocol;
             try
             {
-                // Older Mono builds used by Unity may not trust the GitHub cert;
-                // accept it unconditionally for this lightweight update probe.
                 ServicePointManager.ServerCertificateValidationCallback =
                     (_, __, ___, ____) => true;
                 ServicePointManager.SecurityProtocol =
-                    (SecurityProtocolType)3072; // Tls12 enum value
+                    (SecurityProtocolType)3072; // Tls12
 
                 var request = (HttpWebRequest)WebRequest.Create(ApiUrl);
                 request.UserAgent = "MapEditorMod/" + PluginInfo.Version;
@@ -55,12 +60,17 @@ namespace MapEditorMod
                     return;
                 }
 
-                string releaseUrl = htmlUrl ?? "https://github.com/anonymusdennis/E2E-Mapeditor-V2.0/releases/latest";
+                string releaseUrl = htmlUrl ?? RepoUrl + "/releases/latest";
                 E2EApi.MainThread.Post(() => OnVersionReceived(tagName, releaseUrl));
             }
             catch (Exception e)
             {
                 Plugin.Log.LogWarning("Update check failed: " + e.Message);
+            }
+            finally
+            {
+                ServicePointManager.ServerCertificateValidationCallback = prevCallback;
+                ServicePointManager.SecurityProtocol = prevProtocol;
             }
         }
 

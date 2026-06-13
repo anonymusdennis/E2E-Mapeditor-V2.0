@@ -18,7 +18,7 @@ namespace MapEditorMod
             var list = UiFactory.VerticalList(window.Content);
 
             var label = UiFactory.Label(list,
-                "E2E Map Editor " + newVersion + " is available  (you have " + PluginInfo.Version + ")",
+                "E2E Map Editor " + newVersion + " is available (you have " + PluginInfo.Version + ")",
                 13);
             UiFactory.FixHeight(label, 42f);
 
