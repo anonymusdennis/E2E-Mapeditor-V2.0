@@ -112,8 +112,11 @@ namespace MapEditorMod.WebUi
     width:100%; background:#0e0e14; border:1px solid #333; color:#eee;
     padding:8px 10px; border-radius:6px; margin-bottom:10px;
     font-size:13px; font-family:inherit; display:block; }
+  #modal_box input[type=text].error { border-color:#c04040; }
+  #modal_err { font-size:12px; color:#e09a9a; margin:-6px 0 8px; display:none; }
   #modal_box textarea { resize:vertical; min-height:60px; }
   #modal_btns { display:flex; gap:8px; justify-content:flex-end; margin-top:4px; }
+  #modal_box.nameonly textarea { display:none; margin-bottom:0; }
 </style>
 </head>
 <body>
@@ -344,6 +347,7 @@ namespace MapEditorMod.WebUi
     <h3 id='modal_title'>Add custom building block</h3>
     <input type='text' id='modal_name' placeholder='Name…' maxlength='80'
            onkeydown='if(event.key===""Enter"")confirmModal()'>
+    <div id='modal_err'>Name is required.</div>
     <textarea id='modal_desc' placeholder='Description (optional)…' maxlength='400'></textarea>
     <div id='modal_btns'>
       <button onclick='cancelModal()'>Cancel</button>
@@ -872,10 +876,13 @@ async function poll() {
 }
 
 /* ---- modal ---- */
-function openModal(title, nameVal, descVal, callback) {
+function openModal(title, nameVal, descVal, callback, nameOnly) {
   el('modal_title').textContent = title;
   el('modal_name').value = nameVal || '';
+  el('modal_name').classList.remove('error');
+  el('modal_err').style.display = 'none';
   el('modal_desc').value = descVal || '';
+  el('modal_box').classList.toggle('nameonly', !!nameOnly);
   modalCallback = callback;
   el('modal_overlay').classList.add('show');
   el('modal_name').focus();
@@ -886,11 +893,22 @@ function cancelModal() {
 }
 function confirmModal() {
   const name = el('modal_name').value.trim();
-  if (!name) { el('modal_name').focus(); return; }
+  if (!name) {
+    el('modal_name').classList.add('error');
+    el('modal_err').style.display = 'block';
+    el('modal_name').focus();
+    return;
+  }
   const desc = el('modal_desc').value.trim();
   if (modalCallback) modalCallback(name, desc);
   cancelModal();
 }
+el('modal_name').addEventListener('input', () => {
+  if (el('modal_name').value.trim()) {
+    el('modal_name').classList.remove('error');
+    el('modal_err').style.display = 'none';
+  }
+});
 document.addEventListener('keydown', ev => {
   if (ev.key === 'Escape' && el('modal_overlay').classList.contains('show')) cancelModal();
 });
@@ -938,17 +956,19 @@ function deleteCustomBlock(i) {
   prefs.customBlocks.splice(i, 1);
   if (customSelectedId === i) customSelectedId = -1;
   else if (customSelectedId > i) customSelectedId--;
+  // safety clamp: ensure selection is within bounds
+  if (customSelectedId >= prefs.customBlocks.length) customSelectedId = -1;
   savePrefs();
   renderCustomBlocks();
 }
 
 function renameCategoryPrompt() {
   const cur = prefs.customCategoryName || 'Custom';
-  const newName = prompt('Category name:', cur);
-  if (!newName || !newName.trim()) return;
-  prefs.customCategoryName = newName.trim();
-  el('cb_catname').textContent = prefs.customCategoryName;
-  savePrefs();
+  openModal('Rename category', cur, '', (name) => {
+    prefs.customCategoryName = name;
+    el('cb_catname').textContent = name;
+    savePrefs();
+  }, true);
 }
 
 function renderCustomBlocks() {
