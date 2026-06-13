@@ -262,6 +262,15 @@ namespace E2EApi.Persistence
             {
                 try
                 {
+                    // The editor loads its sidecar via OnEditorEntered/LoadFromDirectory,
+                    // not through SaveManager. Any LoadTheLevel call that fires while an
+                    // editor session is open is a play-test level load/unload; processing
+                    // it here would reset the in-memory placements (stamps, fences, etc.)
+                    // with whatever — possibly empty — data comes from the play-test path.
+                    if (Events.GameEvents.IsInEditor)
+                    {
+                        return;
+                    }
                     Current = new ModExtras();
                     if (__result)
                     {
