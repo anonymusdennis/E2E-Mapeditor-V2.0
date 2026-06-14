@@ -1403,6 +1403,14 @@ namespace MapEditorMod.WebUi
                     case "reset":
                         MapGeometry.ResetDefault();
                         break;
+                    case "hide":
+                        MapGeometry.SetLayerHidden(
+                            GetInt(query, "index", MapGeometry.SelectedVirtualLayerIndex),
+                            GetBool(query, "hidden", true));
+                        break;
+                    case "restore":
+                        MapGeometry.RestoreFromTrash(GetInt(query, "trashIndex", 0));
+                        break;
                     default:
                         return "{\"ok\":false,\"msg\":\"unknown geometry action\"}";
                 }
@@ -1512,6 +1520,19 @@ namespace MapEditorMod.WebUi
             }
             v = v.ToLowerInvariant();
             return v == "true" || v == "1" || v == "yes" || v == "on";
+        }
+
+        private static bool GetBool(Dictionary<string, string> query, string key, bool fallback)
+        {
+            string v = Get(query, key);
+            if (string.IsNullOrEmpty(v))
+            {
+                return fallback;
+            }
+            v = v.ToLowerInvariant();
+            if (v == "false" || v == "0" || v == "no" || v == "off") return false;
+            if (v == "true" || v == "1" || v == "yes" || v == "on") return true;
+            return fallback;
         }
 
         private static int GetInt(Dictionary<string, string> query, string key, int fallback)

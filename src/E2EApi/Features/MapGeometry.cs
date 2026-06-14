@@ -32,6 +32,11 @@ namespace E2EApi.Features
             public string Name;
             public VirtualLayerType Type;
             public int BackingLayer;
+            /// <summary>
+            /// When true the layer is visually hidden from the game view unless it is
+            /// the currently selected editing layer (in which case it is temporarily shown).
+            /// </summary>
+            public bool Hidden;
 
             public VirtualLayer Clone()
             {
@@ -41,6 +46,7 @@ namespace E2EApi.Features
                     Name = Name,
                     Type = Type,
                     BackingLayer = BackingLayer,
+                    Hidden = Hidden,
                 };
             }
         }
@@ -109,6 +115,7 @@ namespace E2EApi.Features
             ModExtras.Saving += OnSaving;
             ModExtras.Loaded += OnLoaded;
             VirtualLayerListUi.Initialise();
+            Editor.Patches.MapExpansionPatchRegistrar.EnsurePatched();
         }
 
         public static VirtualLayer GetLayer(int index)
@@ -183,6 +190,7 @@ namespace E2EApi.Features
             _selectedIndex = ClampLayerIndex(index);
             _virtualSelectionChanged = true;
             SyncNativeEditorLayer();
+            ApplyLayerVisibility();
             FireChanged();
         }
 
@@ -276,6 +284,16 @@ namespace E2EApi.Features
             }
             _trashBin.Clear();
             FireChanged();
+        }
+
+        public static void SetLayerHidden(int index, bool hidden)
+        {
+            EnsureValid();
+            var state = _current.Clone();
+            index = Math.Max(0, Math.Min(index, state.Layers.Count - 1));
+            state.Layers[index].Hidden = hidden;
+            Apply(state);
+            ApplyLayerVisibility();
         }
 
         public static void MoveLayer(int index, int delta)
@@ -380,6 +398,19 @@ namespace E2EApi.Features
                   .Append(",\"name\":\"").Append(JsonEscape(layer.Name)).Append("\"")
                   .Append(",\"type\":\"").Append(layer.Type).Append("\"")
                   .Append(",\"backingLayer\":").Append(layer.BackingLayer)
+                  .Append(",\"hidden\":").Append(layer.Hidden ? "true" : "false")
+                  .Append("}");
+            }
+            sb.Append("],\"trash\":[");
+            for (int i = 0; i < _trashBin.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                var layer = _trashBin[i];
+                sb.Append("{\"id\":").Append(layer.Id)
+                  .Append(",\"name\":\"").Append(JsonEscape(layer.Name)).Append("\"")
+                  .Append(",\"type\":\"").Append(layer.Type).Append("\"")
+                  .Append(",\"backingLayer\":").Append(layer.BackingLayer)
+                  .Append(",\"trashIndex\":").Append(i)
                   .Append("}");
             }
             sb.Append("]}");
@@ -425,7 +456,8 @@ namespace E2EApi.Features
                 foreach (var layer in _current.Layers)
                 {
                     section.Add("layer=" + layer.Id + "|" + layer.Type + "|" +
-                        layer.BackingLayer + "|" + Escape(layer.Name));
+                        layer.BackingLayer + "|" + Escape(layer.Name) + "|" +
+                        (layer.Hidden ? "1" : "0"));
                 }
                 extras.RequiresMod = true;
                 extras.GeometryFeatureVersion = FormatVersion;
@@ -534,6 +566,54 @@ namespace E2EApi.Features
             return x >= 0 && x < NativeWidth && y >= 0 && y < NativeHeight;
         }
 
+        /// <summary>
+        /// Show or hide the game-level backing layer objects to match the Hidden flags.
+        /// A hidden virtual layer's backing native layer is deactivated UNLESS the
+        /// currently selected virtual layer also uses that same backing layer — in that
+        /// case it stays visible so the player can keep editing.
+        /// </summary>
+        public static void ApplyLayerVisibility()
+        {
+            if (!E2EApi.Events.GameEvents.IsEditorActive)
+            {
+                return;
+            }
+            var manager = BaseLevelManager.GetInstance();
+            if (manager == null || manager.m_BuildingLayers == null)
+            {
+                return;
+            }
+
+            int selectedBacking = GetBackingLayer(SelectedVirtualLayerIndex);
+
+            // Determine visibility for each native layer slot:
+            // visible if ANY non-hidden virtual layer uses it, OR if the selected
+            // virtual layer (even if marked hidden) uses it (auto-unhide while editing).
+            var nativeVisible = new bool[NativeLayerCount];
+            for (int i = 0; i < _current.Layers.Count; i++)
+            {
+                var layer = _current.Layers[i];
+                int backing = Clamp(layer.BackingLayer, 0, NativeLayerCount - 1);
+                bool isSelected = (i == SelectedVirtualLayerIndex);
+                if (!layer.Hidden || isSelected)
+                {
+                    nativeVisible[backing] = true;
+                }
+            }
+
+            for (int n = 0; n < NativeLayerCount && n < manager.m_BuildingLayers.Length; n++)
+            {
+                var ld = manager.m_BuildingLayers[n];
+                bool show = nativeVisible[n];
+                if (ld.m_Objects != null) ld.m_Objects.SetActive(show);
+                if (ld.m_Tiles != null) ld.m_Tiles.gameObject.SetActive(show);
+                if (ld.m_Walls != null) ld.m_Walls.SetActive(show);
+                if (ld.m_Decorations != null) ld.m_Decorations.SetActive(show);
+            }
+        }
+
+
+
         private static GeometryState Parse(List<string> lines)
         {
             var state = new GeometryState();
@@ -579,6 +659,7 @@ namespace E2EApi.Features
                             Type = type,
                             BackingLayer = backing,
                             Name = Unescape(p[3]),
+                            Hidden = p.Length >= 5 && p[4] == "1",
                         });
                     }
                 }

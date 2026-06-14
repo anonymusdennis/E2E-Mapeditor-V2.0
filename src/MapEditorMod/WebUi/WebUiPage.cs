@@ -274,7 +274,7 @@ namespace MapEditorMod.WebUi
                    display:none; align-items:center; justify-content:center; padding:20px; }
   #layer_overlay.show { display:flex; }
   #layer_box { background:#1a1a22; border:1px solid #3a3a4c; border-radius:14px;
-               width:min(720px,96vw); max-height:92vh; overflow:auto; padding:18px 20px;
+               width:min(900px,96vw); max-height:92vh; overflow:auto; padding:18px 20px;
                box-shadow:0 16px 48px rgba(0,0,0,.55); }
   #layer_box h3 { margin:0; font-size:18px; color:#fff; }
   .layer-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
@@ -286,13 +286,15 @@ namespace MapEditorMod.WebUi
   .layer-bounds button { font-size:11px; padding:4px 8px; }
   .layer-add-row { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
   .layer-add-row button { font-size:11px; background:#2a3040; border-color:#4a5070; }
-  .layer-stack { position:relative; padding:12px 8px 28px; min-height:120px; }
+  .layer-panels { display:flex; gap:0; align-items:flex-start; }
+  .layer-stack { position:relative; flex:1; padding:12px 8px 28px; min-height:120px; }
   .layer-sheet {
     position:relative; margin:0 auto 0; width:100%; max-width:640px;
     background: linear-gradient(145deg, #faf6ec 0%, #ebe4d4 55%, #ddd4c4 100%);
     color:#2a2820; border:1px solid #c8c0b0; border-radius:3px 3px 1px 1px;
     box-shadow: 1px 2px 0 #fff inset, 2px 3px 8px rgba(0,0,0,.28);
     padding:10px 14px 12px; transition: transform .18s ease, box-shadow .18s ease, margin .18s ease;
+    cursor:grab;
   }
   .layer-sheet + .layer-sheet { margin-top:-18px; }
   .layer-sheet.selected {
@@ -301,6 +303,10 @@ namespace MapEditorMod.WebUi
     outline: 2px solid #7a7af0;
     z-index: 50 !important;
   }
+  .layer-sheet.hidden-layer { opacity:0.45; filter:grayscale(60%); }
+  .layer-sheet.dragging { opacity:0.35; cursor:grabbing; }
+  .layer-sheet.drag-over-top { border-top:3px solid #7a7af0; margin-top:-21px; }
+  .layer-sheet.drag-over-bottom { border-bottom:3px solid #7a7af0; }
   .layer-sheet.type-underground { background: linear-gradient(145deg,#e8dcc8,#c8b898); }
   .layer-sheet.type-ground { background: linear-gradient(145deg,#eef4e8,#d4e0c8); }
   .layer-sheet.type-vent { background: linear-gradient(145deg,#e8eef4,#c8d4e0); }
@@ -318,6 +324,23 @@ namespace MapEditorMod.WebUi
   .layer-actions button.danger { border-color:#a05050; color:#802020; }
   .layer-actions select { font-size:11px; padding:3px 6px; background:#f8f4ec; border:1px solid #bbb;
                           border-radius:4px; color:#333; }
+  #trash_panel { width:210px; min-width:180px; flex-shrink:0; background:#16161f;
+                 border-left:1px solid #2e2e40; border-radius:0 8px 8px 0; padding:12px 10px;
+                 min-height:200px; }
+  #trash_panel h4 { margin:0 0 10px; font-size:13px; color:#aaa; text-align:center; }
+  #trash_drop_area { min-height:80px; background:#1e1e2a; border:2px dashed #3a3a50;
+                     border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:6px; }
+  #trash_drop_area.drag-active { border-color:#7a7af0; background:#22223a; }
+  #trash_drop_hint { font-size:11px; color:#555; text-align:center; padding:14px 6px; }
+  .trash-tile { background:#23232f; border:1px solid #3a3a4c; border-radius:6px;
+                padding:7px 9px; cursor:grab; transition:background .15s; }
+  .trash-tile:hover { background:#2c2c3c; }
+  .trash-tile strong { font-size:12px; color:#ccc; display:block; }
+  .trash-tile span { font-size:10px; color:#777; }
+  .trash-tile .restore-btn { font-size:10px; padding:2px 6px; margin-top:5px; display:block;
+                              background:#2a3040; border:1px solid #4a5070; color:#9ab; cursor:pointer;
+                              border-radius:4px; width:100%; text-align:center; }
+  .trash-tile .restore-btn:hover { background:#384060; }
   .layer-footer { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px;
                   padding-top:12px; border-top:1px solid #2e2e3c; }
   .layer-hash { font-size:11px; color:#8d8da8; font-family:monospace; }
@@ -765,7 +788,7 @@ namespace MapEditorMod.WebUi
       <h3>🗂 Virtual Map Layers</h3>
       <button onclick='closeLayerStack()'>Close</button>
     </div>
-    <div class='hint' style='margin-bottom:10px'>Stack of logical floors stored in Level.e2e. Vanilla Level.dat stays 120×120 — mod tiles use virtual layers.</div>
+    <div class='hint' style='margin-bottom:10px'>Stack of logical floors stored in Level.e2e. Drag to reorder. Right-click a floor in-game to hide/show it. Drag floors to 🗑 Deleted to remove them.</div>
     <div id='layer_warning' class='layer-warn'></div>
     <div class='layer-bounds'>
       <span class='lbl'>Bounds:</span>
@@ -786,7 +809,18 @@ namespace MapEditorMod.WebUi
       <button onclick='geoAdd(""Vent"")'>+ Vent</button>
       <button onclick='geoAdd(""Roof"")'>+ Roof</button>
     </div>
-    <div id='layer_stack' class='layer-stack'></div>
+    <div class='layer-panels'>
+      <div id='layer_stack' class='layer-stack'
+           ondragover='event.preventDefault()' ondrop='onDropTrashRestore(event)'></div>
+      <div id='trash_panel'>
+        <h4>🗑 Deleted Floors</h4>
+        <div id='trash_drop_area'
+             ondragover='onTrashDragOver(event)' ondragleave='onTrashDragLeave(event)'
+             ondrop='onDropToTrash(event)'>
+          <div id='trash_drop_hint'>Drag floors here to delete</div>
+        </div>
+      </div>
+    </div>
     <div class='layer-footer'>
       <button class='danger' onclick='geoReset()'>Reset vanilla 6-layer layout</button>
       <span id='layer_hash' class='layer-hash'></span>
@@ -1335,6 +1369,9 @@ function openLayerStack() {
 
 function closeLayerStack() { el('layer_overlay').classList.remove('show'); }
 
+let _dragSrcIndex = null;   // index being dragged from layer stack
+let _dragSrcTrash = null;   // trashIndex being dragged from trash bin
+
 function renderLayerStack() {
   const geom = lastState && lastState.mapGeometry;
   if (!geom || !geom.layers) {
@@ -1361,10 +1398,18 @@ function renderLayerStack() {
   geom.layers.forEach((layer, i) => {
     const sheet = document.createElement('div');
     const typeKey = (layer.type || 'Ground').toLowerCase();
-    sheet.className = 'layer-sheet type-' + typeKey + (i === selected ? ' selected' : '');
+    const isHidden = !!layer.hidden;
+    let cls = 'layer-sheet type-' + typeKey;
+    if (i === selected) cls += ' selected';
+    if (isHidden) cls += ' hidden-layer';
+    sheet.className = cls;
     sheet.style.zIndex = (i + 1).toString();
+    sheet.draggable = true;
+    sheet.dataset.layerIndex = i;
     const opts = LAYER_TYPES.map(t =>
       `<option value=""${t}"" ${layer.type === t ? 'selected' : ''}>${t}</option>`).join('');
+    const eyeIcon = isHidden ? '🙈' : '👁';
+    const eyeTitle = isHidden ? 'Show in game' : 'Hide from game';
     sheet.innerHTML =
       `<div class=""layer-sheet-head"">
         <span class=""layer-idx"">#${i}</span>
@@ -1374,14 +1419,102 @@ function renderLayerStack() {
       <div class=""layer-meta"">Native backing layer ${layer.backingLayer}</div>
       <div class=""layer-actions"">
         <button onclick=""geoSelect(${i})"">${i === selected ? '● Selected' : 'Select'}</button>
-        <button onclick=""geoMove(${i},-1)"" title=""Move up in stack"">↑</button>
-        <button onclick=""geoMove(${i},1)"" title=""Move down in stack"">↓</button>
+        <button onclick=""geoHide(${i},${!isHidden})"" title=""${eyeTitle}"">${eyeIcon}</button>
         <button onclick=""geoDuplicate(${i})"">Duplicate</button>
-        <button class=""danger"" onclick=""geoRemove(${i})"">Remove</button>
+        <button class=""danger"" onclick=""geoRemove(${i})"">🗑 Delete</button>
         <select onchange=""geoType(${i},this.value)"">${opts}</select>
       </div>`;
+    // drag-and-drop: reorder
+    sheet.addEventListener('dragstart', e => {
+      _dragSrcIndex = i;
+      _dragSrcTrash = null;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', 'layer:' + i);
+      setTimeout(() => sheet.classList.add('dragging'), 0);
+    });
+    sheet.addEventListener('dragend', () => {
+      sheet.classList.remove('dragging');
+      document.querySelectorAll('.drag-over-top,.drag-over-bottom')
+        .forEach(n => n.classList.remove('drag-over-top','drag-over-bottom'));
+    });
+    sheet.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = sheet.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      document.querySelectorAll('.drag-over-top,.drag-over-bottom')
+        .forEach(n => n.classList.remove('drag-over-top','drag-over-bottom'));
+      if (e.clientY < mid) sheet.classList.add('drag-over-top');
+      else sheet.classList.add('drag-over-bottom');
+    });
+    sheet.addEventListener('dragleave', () => {
+      sheet.classList.remove('drag-over-top','drag-over-bottom');
+    });
+    sheet.addEventListener('drop', async e => {
+      e.preventDefault();
+      sheet.classList.remove('drag-over-top','drag-over-bottom');
+      if (_dragSrcTrash !== null) {
+        // restore from trash into position i
+        await geoApply(await post('/api/geometry/restore?trashIndex=' + _dragSrcTrash));
+        _dragSrcTrash = null;
+        return;
+      }
+      if (_dragSrcIndex === null || _dragSrcIndex === i) return;
+      const delta = i - _dragSrcIndex;
+      await geoApply(await post('/api/geometry/move?index=' + _dragSrcIndex + '&delta=' + delta));
+      _dragSrcIndex = null;
+    });
     stack.appendChild(sheet);
   });
+  renderTrashBin(geom.trash || []);
+}
+
+function renderTrashBin(trashItems) {
+  const area = el('trash_drop_area');
+  // keep the drop hint but remove old tiles
+  const hint = el('trash_drop_hint');
+  area.innerHTML = '';
+  area.appendChild(hint);
+  hint.style.display = trashItems.length ? 'none' : 'block';
+  trashItems.forEach((layer, ti) => {
+    const tile = document.createElement('div');
+    tile.className = 'trash-tile';
+    tile.draggable = true;
+    tile.dataset.trashIndex = ti;
+    tile.innerHTML =
+      `<strong>${layerEsc(layer.name)}</strong>
+       <span>${layerEsc(layer.type)}</span>
+       <button class=""restore-btn"" onclick=""geoRestore(${layer.trashIndex !== undefined ? layer.trashIndex : ti})"">↩ Restore</button>`;
+    tile.addEventListener('dragstart', e => {
+      _dragSrcTrash = ti;
+      _dragSrcIndex = null;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', 'trash:' + ti);
+    });
+    area.appendChild(tile);
+  });
+}
+
+// Drop onto main layer area from trash (restore)
+async function onDropTrashRestore(e) {
+  e.preventDefault();
+  if (_dragSrcTrash === null) return;
+  await geoApply(await post('/api/geometry/restore?trashIndex=' + _dragSrcTrash));
+  _dragSrcTrash = null;
+}
+
+function onTrashDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  el('trash_drop_area').classList.add('drag-active');
+}
+function onTrashDragLeave() { el('trash_drop_area').classList.remove('drag-active'); }
+async function onDropToTrash(e) {
+  e.preventDefault();
+  el('trash_drop_area').classList.remove('drag-active');
+  if (_dragSrcIndex === null) return;
+  await geoApply(await post('/api/geometry/remove?index=' + _dragSrcIndex));
+  _dragSrcIndex = null;
 }
 
 async function geoApply(r) {
@@ -1401,6 +1534,8 @@ async function geoRemove(i) {
 async function geoMove(i, delta) { await geoApply(await post('/api/geometry/move?index=' + i + '&delta=' + delta)); }
 async function geoDuplicate(i) { await geoApply(await post('/api/geometry/duplicate?index=' + i)); }
 async function geoType(i, type) { await geoApply(await post('/api/geometry/type?index=' + i + '&type=' + type)); }
+async function geoHide(i, hidden) { await geoApply(await post('/api/geometry/hide?index=' + i + '&hidden=' + hidden)); }
+async function geoRestore(ti) { await geoApply(await post('/api/geometry/restore?trashIndex=' + ti)); }
 async function geoBoundsDelta(field, delta) {
   await geoApply(await post('/api/geometry/bounds-delta?field=' + field + '&delta=' + delta));
 }

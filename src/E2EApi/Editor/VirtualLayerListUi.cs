@@ -3,6 +3,7 @@ using E2EApi.Events;
 using E2EApi.Features;
 using E2EApi.UI;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace E2EApi.Editor
@@ -124,10 +125,13 @@ namespace E2EApi.Editor
             _scrollRoot = new GameObject("E2E_VirtualLayerList");
             _scrollRoot.transform.SetParent(anchor, false);
             var rootRect = _scrollRoot.AddComponent<RectTransform>();
-            rootRect.anchorMin = Vector2.zero;
-            rootRect.anchorMax = Vector2.one;
-            rootRect.offsetMin = Vector2.zero;
-            rootRect.offsetMax = Vector2.zero;
+            // Anchor to top of parent container, extend down with an explicit large height
+            // so ~20 floors are visible without excessive scrolling (10x the original 2-row height).
+            rootRect.anchorMin = new Vector2(0f, 1f);
+            rootRect.anchorMax = new Vector2(1f, 1f);
+            rootRect.pivot = new Vector2(0.5f, 1f);
+            rootRect.anchoredPosition = Vector2.zero;
+            rootRect.sizeDelta = new Vector2(0f, 680f);
             var rootLayoutEl = _scrollRoot.AddComponent<LayoutElement>();
             rootLayoutEl.ignoreLayout = true;
 
@@ -190,6 +194,7 @@ namespace E2EApi.Editor
                 int capturedIndex = i;
                 var layer = state.Layers[i];
                 bool isSelected = (i == selected);
+                bool isHidden = layer.Hidden;
 
                 var rowGo = new GameObject("E2E_Layer_" + i);
                 rowGo.transform.SetParent(_content, false);
@@ -203,8 +208,22 @@ namespace E2EApi.Editor
 
                 var btn = rowGo.AddComponent<Button>();
                 btn.targetGraphic = bg;
-                ApplyButtonStyle(btn, bg, isSelected);
+                ApplyButtonStyle(btn, bg, isSelected, isHidden);
                 btn.onClick.AddListener(() => SelectLayer(capturedIndex));
+
+                // Right-click to toggle hidden state
+                var trigger = rowGo.AddComponent<EventTrigger>();
+                var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
+                entry.callback.AddListener(eventData =>
+                {
+                    var pe = eventData as PointerEventData;
+                    if (pe != null && pe.button == PointerEventData.InputButton.Right)
+                    {
+                        MapGeometry.SetLayerHidden(capturedIndex,
+                            !MapGeometry.GetLayer(capturedIndex).Hidden);
+                    }
+                });
+                trigger.triggers.Add(entry);
 
                 var textGo = new GameObject("Label");
                 textGo.transform.SetParent(rowGo.transform, false);
@@ -217,7 +236,7 @@ namespace E2EApi.Editor
                 label.text = FormatLabel(i, layer);
                 label.fontSize = 11;
                 label.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                label.color = Color.white;
+                label.color = isHidden ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.white;
                 label.alignment = TextAnchor.MiddleLeft;
                 label.horizontalOverflow = HorizontalWrapMode.Overflow;
                 label.verticalOverflow = VerticalWrapMode.Truncate;
@@ -229,14 +248,25 @@ namespace E2EApi.Editor
             LayoutRebuilder.ForceRebuildLayoutImmediate(_content);
         }
 
-        private static void ApplyButtonStyle(Button btn, Image bg, bool selected)
+        private static void ApplyButtonStyle(Button btn, Image bg, bool selected, bool hidden = false)
         {
-            var normalColor = selected
-                ? new Color(0.30f, 0.50f, 0.90f, 1f)
-                : new Color(0.18f, 0.18f, 0.24f, 1f);
-            var highlightColor = selected
-                ? new Color(0.40f, 0.60f, 1.00f, 1f)
-                : new Color(0.28f, 0.28f, 0.36f, 1f);
+            Color normalColor;
+            Color highlightColor;
+            if (selected)
+            {
+                normalColor = new Color(0.30f, 0.50f, 0.90f, 1f);
+                highlightColor = new Color(0.40f, 0.60f, 1.00f, 1f);
+            }
+            else if (hidden)
+            {
+                normalColor = new Color(0.12f, 0.12f, 0.15f, 1f);
+                highlightColor = new Color(0.20f, 0.20f, 0.25f, 1f);
+            }
+            else
+            {
+                normalColor = new Color(0.18f, 0.18f, 0.24f, 1f);
+                highlightColor = new Color(0.28f, 0.28f, 0.36f, 1f);
+            }
             bg.color = normalColor;
             var colors = btn.colors;
             colors.normalColor = normalColor;
@@ -282,7 +312,8 @@ namespace E2EApi.Editor
 
         private static string FormatLabel(int index, MapGeometry.VirtualLayer layer)
         {
-            return index + ": " + layer.Name;
+            string prefix = layer.Hidden ? "[H] " : "";
+            return prefix + index + ": " + layer.Name;
         }
     }
 }
