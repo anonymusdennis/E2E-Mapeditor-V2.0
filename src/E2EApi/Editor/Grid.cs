@@ -126,7 +126,7 @@ namespace E2EApi.Editor
             // our y convention (0 = southernmost tile).
             Vector3 origin = tiles.WorldPositionFromTileIndex(0, 0, center: false);
             Vector3 cell = tiles.CellSize;
-            if (cell.x == 0f || cell.y == 0f)
+            if (cell.x <= 0f || cell.y <= 0f)
             {
                 return false;
             }
