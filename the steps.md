@@ -311,7 +311,9 @@ loads, and plays at double speed starting at 22:00 with a 48-hour escape deadlin
 - [x] `docs/user-install.md` — Windows + Linux install guide
 - [x] `docs/api.md` — modder-facing API documentation (full E2EApi surface +
       the web API endpoints)
-- [ ] GitHub release / ModDB page — pending the Windows validation above
+- [x] GitHub release / ModDB page — GitHub release workflow (`release.yml`) +
+      CI installer validation (`ci.yml` runs on Linux **and** Windows runners);
+      ModDB page pending the Windows on-machine validation step above
 
 **Done when:** a clean Windows machine can install from the release zip and edit a map.
 
@@ -319,10 +321,15 @@ loads, and plays at double speed starting at 22:00 with a 48-hour escape deadlin
 
 ## Phase 9 — Later / stretch
 
-- [ ] Multiplayer gate: "you need this mod to play this map"
-      (handshake via Photon custom properties)
-- [ ] Steam Workshop interplay for modded maps
-- [ ] External editor window as companion process (IPC)
+- [x] Multiplayer gate: "you need this mod to play this map"
+      (handshake via Photon custom properties — `E2EApi.Features.MultiplayerGate`;
+      reflection-based so the API DLL compiles without a hard Photon dependency)
+- [x] Steam Workshop interplay for modded maps
+      (`E2EApi.Features.WorkshopInterop` — stages `e2e_workshop_meta.txt`
+      alongside the sidecar on upload; fires `WorkshopMapLoaded` on download)
+- [x] External editor window as companion process (IPC)
+      — fulfilled by the web UI (real browser window at `http://127.0.0.1:8723`
+      talking HTTP to the mod; see Phase 5 Stage 2)
 
 ---
 

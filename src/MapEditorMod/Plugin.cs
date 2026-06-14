@@ -69,6 +69,8 @@ namespace MapEditorMod
             E2EApi.Features.CustomAssetPlacements.Initialise();
             E2EApi.Features.MapSettings.Initialise();
             E2EApi.Persistence.VanillaFallback.Initialise();
+            E2EApi.Features.MultiplayerGate.Initialise();
+            E2EApi.Features.WorkshopInterop.Initialise();
 
             GameEvents.LevelLoaded += () =>
             {

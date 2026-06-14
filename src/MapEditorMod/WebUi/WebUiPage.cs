@@ -504,6 +504,19 @@ namespace MapEditorMod.WebUi
         the real map travels in the sidecar and is restored automatically on modded clients.
         When off, vanilla players see the mod-free extras.</div>
     </div>
+    <div class='card' id='mp_card'>
+      <h2>Multiplayer status</h2>
+      <div id='mp_status' class='hint'>Not in a multiplayer room.</div>
+      <div class='row' style='margin-top:8px;gap:6px' id='mp_actions' style='display:none'>
+        <button onclick='mpAnnounce()' title='Tell other players in the room that this map requires the mod'>
+          📡 Announce mod required
+        </button>
+        <button onclick='mpRefresh()' title='Re-read the current room properties'>⟳ Refresh</button>
+      </div>
+      <div class='hint' style='margin-top:4px'>When you are the room host and the map requires
+        the mod, click "Announce" to set a Photon room property so other modded clients know.
+        Unmodded clients see the vanilla-fallback disclaimer map automatically.</div>
+    </div>
     <div class='card' id='ca_card'>
       <h2>Custom assets <span id='ca_count' style='font-weight:normal;font-size:12px;color:#7a7ab0'></span></h2>
       <div class='hint'>Drop Unity 5.5-compatible asset bundles into
@@ -1920,10 +1933,45 @@ async function poll() {
     if (s.inEditor && blocks.length === 0) loadBlocks();
     if (el('page_gameplay').classList.contains('on')) refreshPlayer();
     if (el('layer_overlay').classList.contains('show')) renderLayerStack();
+    if (el('page_settings') && el('page_settings').classList.contains('on')) refreshMp();
   } catch (e) {
     el('status').textContent = 'game not reachable';
   }
   setTimeout(poll, 1000);
+}
+
+/* ---- multiplayer gate ---- */
+async function refreshMp() {
+  try {
+    const m = await (await fetch('/api/multiplayer')).json();
+    const card = el('mp_card');
+    const statusEl = el('mp_status');
+    const actionsEl = el('mp_actions');
+    if (!m.inRoom) {
+      statusEl.textContent = 'Not in a multiplayer room.';
+      actionsEl.style.display = 'none';
+    } else {
+      const role = m.isHost ? 'Host' : 'Client';
+      let txt = role + ' — in Photon room.';
+      if (m.requiresMod) {
+        txt += ' 🔑 Room property set: requires mod v' + (m.roomModVersion || '?') + '.';
+      } else {
+        txt += ' No mod-required property set.';
+      }
+      statusEl.textContent = txt;
+      actionsEl.style.display = m.isHost ? '' : 'none';
+    }
+  } catch (_) {}
+}
+async function mpAnnounce() {
+  const r = await post('/api/multiplayer/announce');
+  msg(r.ok ? 'Room property set ✓' : 'Failed to set room property (not host or not in room)');
+  await refreshMp();
+}
+async function mpRefresh() {
+  await post('/api/multiplayer/refresh');
+  await refreshMp();
+  msg('Room state refreshed');
 }
 
 /* ---- modal ---- */

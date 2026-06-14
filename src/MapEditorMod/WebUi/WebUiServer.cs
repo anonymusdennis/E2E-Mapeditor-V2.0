@@ -834,6 +834,33 @@ namespace MapEditorMod.WebUi
                     }));
                     return 200;
                 }
+                // /api/multiplayer — current multiplayer / Photon room state
+                if (path == "/api/multiplayer")
+                {
+                    body = Encoding.UTF8.GetBytes(
+                        MainThread.Run(() => E2EApi.Features.MultiplayerGate.ToJson()));
+                    return 200;
+                }
+                // /api/multiplayer/announce — host broadcasts mod-required to the room
+                if (method == "POST" && path == "/api/multiplayer/announce")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        bool ok = E2EApi.Features.MultiplayerGate.AnnounceRequiresMod();
+                        return "{\"ok\":" + (ok ? "true" : "false") + "}";
+                    }));
+                    return 200;
+                }
+                // /api/multiplayer/refresh — re-read room properties
+                if (method == "POST" && path == "/api/multiplayer/refresh")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        E2EApi.Features.MultiplayerGate.RefreshRoomState();
+                        return E2EApi.Features.MultiplayerGate.ToJson();
+                    }));
+                    return 200;
+                }
                 body = Encoding.UTF8.GetBytes("{\"error\":\"not found\"}");
                 return 404;
             }

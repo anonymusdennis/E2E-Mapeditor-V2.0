@@ -323,6 +323,49 @@ Format (UTF-8): magic line `E2EX1`, a `requiresMod=` line, then named
 - `Section(name)` — get-or-create a section's line list; `ClearSection(name)`.
 - `Serialize()` / `Deserialize(text)`, `IsEmpty`.
 
+### `MultiplayerGate`
+
+Multiplayer compatibility handshake via Photon room custom properties.
+
+When a map with `RequiresMod = true` is loaded in a Photon room (PUN 1.x),
+the host broadcasts a room property `"e2e_mapeditor"` = current mod version.
+Modded clients read this to confirm the requirement; unmodded clients see the
+vanilla-fallback disclaimer map and have no gate code at all.
+
+Photon types are resolved at runtime via reflection so `E2EApi.dll` compiles
+without a hard dependency on the Photon assembly.
+
+- `Initialise()` — wire up sidecar and level hooks (idempotent).
+- `IsMultiplayer` — true when Photon reports being in a room.
+- `IsHost` — true when the local player is the master client.
+- `IsRequiredInCurrentRoom` — true when the active room carries the property.
+- `RoomModVersion` — version string from the room property, or `null`.
+- `AnnounceRequiresMod()` — host sets the room property; returns `false` if not
+  the host or not in a room.
+- `AnnounceNoLongerRequiresMod()` — host clears the property.
+- `RefreshRoomState()` — re-reads room properties and fires events if state
+  changed (call this from a Photon `OnRoomPropertiesUpdate` callback).
+- `RoomRequiresMod` / `RoomNoLongerRequiresMod` (events) — fired on the main
+  thread when the requirement transitions.
+
+### `WorkshopInterop`
+
+Steam Workshop interoperability for mod-required maps.
+
+On upload (extends `VanillaFallback`'s existing hook): if the map has mod
+content, writes `e2e_workshop_meta.txt` alongside the sidecar in the UGC
+content folder. The file records `e2e_version` and `requires_mod`.
+
+On download (via `GetCustomLevelFilePath`): if the map's folder contains
+`e2e_workshop_meta.txt`, fires `WorkshopMapLoaded` with a `WorkshopMapMeta`
+object so the UI can show a compatibility banner.
+
+- `Initialise()` — apply patches (idempotent).
+- `WorkshopMapLoaded` (event) — `Action<WorkshopMapMeta>`; fired on the main
+  thread when a Workshop map with the meta file is resolved for play.
+- `WorkshopMapMeta.ModVersion`, `.RequiresMod`, `.MapDirectory`,
+  `.CompatibilityNote`.
+
 ---
 
 ## `E2EApi.UI`
@@ -396,6 +439,9 @@ generally return `{"ok":bool}` or `{"ok":bool,"msg":"…"}`.
 | POST | `/api/map-settings/set` | `key`, `value` | set a per-map setting (persisted to Level.e2e) |
 | POST | `/api/map-settings/unset` | `key` | remove a per-map setting |
 | POST | `/api/map-settings/clear` | — | remove all per-map settings |
+| GET | `/api/multiplayer` | — | current Photon room state: `{inRoom, isHost, requiresMod, roomModVersion}` |
+| POST | `/api/multiplayer/announce` | — | host sets room property `e2e_mapeditor` = current version; returns `{ok}` |
+| POST | `/api/multiplayer/refresh` | — | re-read room properties and return updated state |
 | POST | `/api/cheat` | `name=heal\|energy\|money\|stealth\|ko-guards\|ko-dogs` | run a play-mode cheat |
 | POST | `/api/dev/skip-title` | — | dismiss the "press spacebar" title screen |
 | POST | `/api/dev/enter-editor` | `file` (optional) | enter the level editor (empty `file` = new map) |

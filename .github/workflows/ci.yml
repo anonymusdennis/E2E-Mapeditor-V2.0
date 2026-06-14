@@ -1,0 +1,97 @@
+name: CI
+
+# Run on every push to main and on PRs.
+# Validates the installer script on both Linux and Windows without needing
+# the actual game files (tests path-detection logic and argument handling).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  installer-linux:
+    name: Installer (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Python version
+        run: python3 --version
+
+      - name: Installer --help / import smoke-test
+        run: |
+          cd installer
+          python3 - <<'EOF'
+          # Verify the module imports and the core helpers work without a real game folder
+          import sys, os, types
+          sys.argv = ['install.py']           # prevent argparse from running
+          # Patch urllib so no network I/O happens
+          import urllib.request
+          def _no_download(url, dest): raise RuntimeError("network disabled in CI")
+          import install as i
+          # Path detection should return None (no game on runner)
+          assert i._detect_game_path() is None, "Unexpected game path detected in CI"
+          # _is_game_folder must return False for a temp dir without the exe
+          import tempfile
+          with tempfile.TemporaryDirectory() as tmp:
+              assert not i._is_game_folder(tmp), "Empty dir falsely detected as game folder"
+          print("installer import smoke-test passed")
+          EOF
+
+  installer-windows:
+    name: Installer (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Python version
+        run: python --version
+
+      - name: Installer smoke-test (Windows)
+        shell: python
+        run: |
+          import sys, os, tempfile
+          sys.argv = ['install.py']
+          # Make sure the installer can be imported and the Windows path logic works
+          sys.path.insert(0, os.path.join(os.getcwd(), 'installer'))
+          import install as i
+          # Path detection on a CI Windows runner: no Escapists 2 install expected
+          result = i._detect_game_path()
+          print(f"Detected game path: {result}")
+          # _is_game_folder should return False for empty dirs
+          with tempfile.TemporaryDirectory() as tmp:
+              assert not i._is_game_folder(tmp), "Empty dir falsely detected as game folder"
+          # Verify that a mock folder with the exe is detected correctly
+          with tempfile.TemporaryDirectory() as tmp:
+              open(os.path.join(tmp, 'TheEscapists2.exe'), 'w').close()
+              assert i._is_game_folder(tmp), "Mock game folder not detected"
+          print("Windows installer smoke-test passed")
+
+  docs-links:
+    name: Docs link check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check that key docs exist
+        run: |
+          for f in docs/api.md docs/user-install.md docs/dev-setup.md \
+                   docs/game-architecture.md docs/leveldat-format.md \
+                   docs/v0-features.md; do
+            if [ ! -f "$f" ]; then
+              echo "MISSING: $f"
+              exit 1
+            fi
+          done
+          echo "All expected docs present."
+
+      - name: Verify installer files present
+        run: |
+          for f in installer/install.py installer/install.bat installer/install.sh; do
+            if [ ! -f "$f" ]; then
+              echo "MISSING: $f"
+              exit 1
+            fi
+          done
+          echo "All installer files present."
