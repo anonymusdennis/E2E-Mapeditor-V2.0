@@ -39,7 +39,7 @@ will silently fail to load.
 using UnityEditor;
 using System.IO;
 
-public class CreateBundles
+public static class CreateBundles
 {
     [MenuItem("Assets/Build AssetBundles")]
     static void Build()
