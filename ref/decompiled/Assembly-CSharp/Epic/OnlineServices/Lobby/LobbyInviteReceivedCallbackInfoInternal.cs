@@ -1,0 +1,31 @@
+using System;
+using System.Runtime.InteropServices;
+
+namespace Epic.OnlineServices.Lobby;
+
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
+internal struct LobbyInviteReceivedCallbackInfoInternal : ICallbackInfo, IDisposable
+{
+	private IntPtr m_ClientData;
+
+	[MarshalAs(UnmanagedType.LPStr)]
+	private string m_InviteId;
+
+	private IntPtr m_LocalUserId;
+
+	private IntPtr m_TargetUserId;
+
+	public object ClientData => Helper.GetClientData(m_ClientData);
+
+	public IntPtr ClientDataAddress => m_ClientData;
+
+	public string InviteId => m_InviteId;
+
+	public ProductUserId LocalUserId => Helper.GetHandle<ProductUserId>(m_LocalUserId);
+
+	public ProductUserId TargetUserId => Helper.GetHandle<ProductUserId>(m_TargetUserId);
+
+	public void Dispose()
+	{
+	}
+}

@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Assembly-CSharp</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <TargetFramework>net35</TargetFramework>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LangVersion>11.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup />
+  <ItemGroup />
+  <ItemGroup>
+    <Reference Include="UnityEngine">
+      <HintPath>../../../../.local/share/Steam/steamapps/common/The Escapists 2/TheEscapists2_Data/Managed/UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Core">
+      <HintPath>../../../../.local/share/Steam/steamapps/common/The Escapists 2/TheEscapists2_Data/Managed/System.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Pathfinding.Ionic.Zip.Reduced">
+      <HintPath>../../../../.local/share/Steam/steamapps/common/The Escapists 2/TheEscapists2_Data/Managed/Pathfinding.Ionic.Zip.Reduced.dll</HintPath>
+    </Reference>
+    <Reference Include="Pathfinding.ClipperLib">
+      <HintPath>../../../../.local/share/Steam/steamapps/common/The Escapists 2/TheEscapists2_Data/Managed/Pathfinding.ClipperLib.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Xml">
+      <HintPath>../../../../.local/share/Steam/steamapps/common/The Escapists 2/TheEscapists2_Data/Managed/System.Xml.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>../../../../.local/share/Steam/steamapps/common/The Escapists 2/TheEscapists2_Data/Managed/UnityEngine.UI.dll</HintPath>
+    </Reference>
+    <Reference Include="Photon3Unity3D">
+      <HintPath>../../../../.local/share/Steam/steamapps/common/The Escapists 2/TheEscapists2_Data/Managed/Photon3Unity3D.dll</HintPath>
+    </Reference>
+    <Reference Include="Rewired_Core">
+      <HintPath>../../../../.local/share/Steam/steamapps/common/The Escapists 2/TheEscapists2_Data/Managed/Rewired_Core.dll</HintPath>
+    </Reference>
+    <Reference Include="TileSystem.Runtime">
+      <HintPath>../../../../.local/share/Steam/steamapps/common/The Escapists 2/TheEscapists2_Data/Managed/TileSystem.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Include="Assembly-CSharp-firstpass">
+      <HintPath>../../../../.local/share/Steam/steamapps/common/The Escapists 2/TheEscapists2_Data/Managed/Assembly-CSharp-firstpass.dll</HintPath>
+    </Reference>
+    <Reference Include="Pathfinding.Poly2Tri">
+      <HintPath>../../../../.local/share/Steam/steamapps/common/The Escapists 2/TheEscapists2_Data/Managed/Pathfinding.Poly2Tri.dll</HintPath>
+    </Reference>
+    <Reference Include="SampleClassLibrary">
+      <HintPath>../../../../.local/share/Steam/steamapps/common/The Escapists 2/TheEscapists2_Data/Managed/SampleClassLibrary.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.Networking">
+      <HintPath>../../../../.local/share/Steam/steamapps/common/The Escapists 2/TheEscapists2_Data/Managed/UnityEngine.Networking.dll</HintPath>
+    </Reference>
+    <Reference Include="BadWordFilter">
+      <HintPath>../../../../.local/share/Steam/steamapps/common/The Escapists 2/TheEscapists2_Data/Managed/BadWordFilter.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

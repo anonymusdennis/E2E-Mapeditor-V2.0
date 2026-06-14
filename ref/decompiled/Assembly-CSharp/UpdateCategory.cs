@@ -1,0 +1,19 @@
+public enum UpdateCategory
+{
+	RapidPeriodic,
+	RegularPeriodic,
+	ModeratePeriodic,
+	SlowPeriodic,
+	Character,
+	Items,
+	Sound,
+	UITrackedElementReporters,
+	TimeSlicedNodeCanvas,
+	TimeSlicedFastInteractions,
+	AI_Events,
+	AI_Events_Slow,
+	World_Slow,
+	FakeCharacter,
+	CrowdCharacter,
+	Count
+}

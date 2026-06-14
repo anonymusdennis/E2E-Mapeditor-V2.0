@@ -7,7 +7,8 @@ old/
 *.dll
 *.exe
 *.pdb
-Assembly-CSharp*
+# game assembly names at repo root (decompiled sources live under ref/)
+/Assembly-CSharp*.dll
 
 # --- build output ---
 bin/

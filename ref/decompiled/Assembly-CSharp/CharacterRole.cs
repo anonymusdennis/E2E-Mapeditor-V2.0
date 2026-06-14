@@ -1,0 +1,21 @@
+public enum CharacterRole
+{
+	Inmate,
+	Guard,
+	Medic,
+	Dog,
+	Maintenance,
+	JobGuy,
+	Visitor,
+	Warden,
+	Generic,
+	Cameraman,
+	CameraFirstSupportCrew,
+	CameraSecondSupportCrew,
+	Dolphin,
+	Ghost,
+	SpecificQuestGiver,
+	Crowd,
+	Invisible,
+	COUNT
+}

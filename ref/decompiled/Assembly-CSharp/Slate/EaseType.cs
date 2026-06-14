@@ -1,0 +1,36 @@
+namespace Slate;
+
+public enum EaseType
+{
+	Linear,
+	QuadraticIn,
+	QuadraticOut,
+	QuadraticInOut,
+	QuarticIn,
+	QuarticOut,
+	QuarticInOut,
+	QuinticIn,
+	QuinticOut,
+	QuinticInOut,
+	CubicIn,
+	CubicOut,
+	CubicInOut,
+	ExponentialIn,
+	ExponentialOut,
+	ExponentialInOut,
+	CircularIn,
+	CircularOut,
+	CircularInOut,
+	SinusoidalIn,
+	SinusoidalOut,
+	SinusoidalInOut,
+	ElasticIn,
+	ElasticOut,
+	ElasticInOut,
+	BounceIn,
+	BounceOut,
+	BounceInOut,
+	BackIn,
+	BackOut,
+	BackInOut
+}
