@@ -40,6 +40,18 @@ namespace E2EApi.Editor.Patches
             typeof(LevelEditor_Controller).GetField("m_bUpdateBrushPosition",
                 BindingFlags.NonPublic | BindingFlags.Instance);
 
+        static MapExpansionPatch()
+        {
+            if (_fRawMouse == null)
+                Log.Warn("MapExpansionPatch: field m_RawMouseToScreen not found — map expansion cursor will not work");
+            if (_fBrushX == null)
+                Log.Warn("MapExpansionPatch: field m_Block_X_Position not found");
+            if (_fBrushY == null)
+                Log.Warn("MapExpansionPatch: field m_Block_Y_Position not found");
+            if (_fUpdateBrush == null)
+                Log.Warn("MapExpansionPatch: field m_bUpdateBrushPosition not found");
+        }
+
         private static void Postfix(LevelEditor_Controller __instance)
         {
             if (_fRawMouse == null || _fBrushX == null || _fBrushY == null ||

@@ -18,6 +18,8 @@ namespace E2EApi.Editor
     {
         private const float RowSpacing = 2f;
         private const float RowHeight = 34f;
+        /// <summary>Visible height of the scroll root; ~20 rows at 34px each.</summary>
+        private const float ScrollViewHeight = 680f;
 
         private static bool _built;
         private static GameObject _scrollRoot;
@@ -131,7 +133,7 @@ namespace E2EApi.Editor
             rootRect.anchorMax = new Vector2(1f, 1f);
             rootRect.pivot = new Vector2(0.5f, 1f);
             rootRect.anchoredPosition = Vector2.zero;
-            rootRect.sizeDelta = new Vector2(0f, 680f);
+            rootRect.sizeDelta = new Vector2(0f, ScrollViewHeight);
             var rootLayoutEl = _scrollRoot.AddComponent<LayoutElement>();
             rootLayoutEl.ignoreLayout = true;
 

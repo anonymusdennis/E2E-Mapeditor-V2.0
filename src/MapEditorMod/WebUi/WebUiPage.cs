@@ -1484,7 +1484,7 @@ function renderTrashBin(trashItems) {
     tile.innerHTML =
       `<strong>${layerEsc(layer.name)}</strong>
        <span>${layerEsc(layer.type)}</span>
-       <button class=""restore-btn"" onclick=""geoRestore(${layer.trashIndex !== undefined ? layer.trashIndex : ti})"">↩ Restore</button>`;
+       <button class=""restore-btn"" onclick=""geoRestore(${layer.trashIndex})"">↩ Restore</button>`;
     tile.addEventListener('dragstart', e => {
       _dragSrcTrash = ti;
       _dragSrcIndex = null;
