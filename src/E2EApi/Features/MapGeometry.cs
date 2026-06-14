@@ -113,7 +113,15 @@ namespace E2EApi.Features
             _initialised = true;
             ModExtras.EnsurePatched();
             ModExtras.Saving += OnSaving;
+            // MapGeometry.OnLoaded must subscribe before FloorTypeRegistry.OnLoaded
+            // so that the registry can read a fully-populated MapGeometry.Current.
             ModExtras.Loaded += OnLoaded;
+            FloorTypeRegistry.Initialise();
+            // Ensure runtime floor patches are active.
+            Editor.Patches.FloorPredicatePatchGroup.EnsurePatched();
+            Editor.Patches.FloorNavigationPatchGroup.EnsurePatched();
+            Editor.Patches.StairsPatchGroup.EnsurePatched();
+            Editor.Patches.FloorZLookupPatchGroup.EnsurePatched();
             VirtualLayerListUi.Initialise();
             Editor.Patches.MapExpansionPatchRegistrar.EnsurePatched();
         }
@@ -204,6 +212,7 @@ namespace E2EApi.Features
             _current = Sanitize(state);
             _selectedIndex = ClampLayerIndex(_selectedIndex);
             _virtualSelectionChanged = true;
+            FloorTypeRegistry.RebuildFromGeometry();
             FireChanged();
         }
 
