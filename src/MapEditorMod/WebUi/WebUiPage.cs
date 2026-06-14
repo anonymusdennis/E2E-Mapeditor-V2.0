@@ -491,7 +491,30 @@ namespace MapEditorMod.WebUi
       <div class='hint'>When on (recommended), publishing a map that needs the mod writes a
         vanilla-safe Level_Finished.dat with ""NEEDS E2E MAPEDITOR MOD"" painted on the ground;
         the real map travels in the sidecar and is restored automatically on modded clients.
-        When off, vanilla players see the map without the modded extras.</div>
+        When off, vanilla players see the mod-free extras.</div>
+    </div>
+    <div class='card' id='ca_card'>
+      <h2>Custom assets <span id='ca_count' style='font-weight:normal;font-size:12px;color:#7a7ab0'></span></h2>
+      <div class='hint'>Drop Unity 5.5-compatible asset bundles into
+        <code>BepInEx/plugins/E2EMapEditor/bundles/</code> then pick a bundle below.
+        Place prefabs at the editor cursor tile. Placements are saved in the Level.e2e sidecar.</div>
+      <div class='row' style='margin-top:8px;align-items:center;gap:8px;flex-wrap:wrap'>
+        <select id='ca_bundle' onchange='loadCaAssets()' style='background:#0e0e12;border:1px solid #333;color:#eee;padding:4px 6px;border-radius:4px;min-width:160px'>
+          <option value=''>— pick a bundle —</option>
+        </select>
+        <button onclick='refreshCaBundles()' title='Refresh bundle list'>⟳</button>
+      </div>
+      <div id='ca_asset_list' style='display:none;margin-top:8px'>
+        <select id='ca_asset' style='background:#0e0e12;border:1px solid #333;color:#eee;padding:4px 6px;border-radius:4px;min-width:200px'>
+          <option value=''>— pick an asset —</option>
+        </select>
+        <div class='row' style='margin-top:6px;gap:6px'>
+          <button id='ca_place_btn' onclick='caPlaceCursor()' disabled title='Place selected prefab at the in-game cursor tile'>📦 Place at cursor</button>
+          <button id='ca_erase_btn' onclick='caEraseCursor()'>✕ Erase at cursor</button>
+          <button class='danger' onclick='caClearAll()'>Clear ALL custom assets</button>
+        </div>
+      </div>
+      <div id='ca_placed' style='margin-top:8px;max-height:140px;overflow-y:auto;display:none'></div>
     </div>
   </div>
 
@@ -872,6 +895,7 @@ function showTab(btn) {
   padMain();
   if (page === 'gameplay') refreshGameplay();
   if (page === 'tilesets') refreshTilesets();
+  if (page === 'tools') { refreshCaBundles(); refreshCaPlaced(); }
 }
 function padMain() {
   document.querySelector('main').style.paddingTop = (el('top').offsetHeight + 10) + 'px';
@@ -1273,7 +1297,89 @@ async function armStamp() {
   });
 })();
 
-/* ---- gameplay tab ---- */
+  /* ---- custom assets tab (Tools page card) ---- */
+  async function refreshCaBundles() {
+    try {
+      const bundles = await (await fetch('/api/custom-assets/bundles')).json();
+      const sel = el('ca_bundle');
+      const prev = sel.value;
+      sel.innerHTML = '<option value=\"\">— pick a bundle —</option>' +
+        bundles.map(b => `<option value=\"${esc(b)}\"${b === prev ? ' selected' : ''}>${esc(b)}</option>`).join('');
+      if (prev && bundles.includes(prev)) {
+        loadCaAssets();
+      } else {
+        el('ca_asset_list').style.display = 'none';
+      }
+    } catch(e) {
+      msg('Could not load bundle list: ' + e);
+    }
+  }
+
+  async function loadCaAssets() {
+    const bundle = el('ca_bundle').value;
+    if (!bundle) { el('ca_asset_list').style.display = 'none'; return; }
+    try {
+      const assets = await (await fetch('/api/custom-assets/list?bundle=' + encodeURIComponent(bundle))).json();
+      const sel = el('ca_asset');
+      sel.innerHTML = '<option value=\"\">— pick an asset —</option>' +
+        assets.map(a => `<option value=\"${esc(a)}\">${esc(a)}</option>`).join('');
+      el('ca_asset_list').style.display = '';
+      el('ca_place_btn').disabled = assets.length === 0;
+    } catch(e) {
+      msg('Could not list assets: ' + e);
+    }
+  }
+
+  async function caPlaceCursor() {
+    const bundle = el('ca_bundle').value;
+    const asset  = el('ca_asset').value;
+    if (!bundle || !asset) { msg('Select a bundle and asset first'); return; }
+    const r = await post(`/api/custom-assets/place-cursor?bundle=${encodeURIComponent(bundle)}&asset=${encodeURIComponent(asset)}`);
+    if (r.ok) {
+      msg(`Placed ${asset} @ (${r.x},${r.y},${r.layer}) — ${r.count} total`);
+      refreshCaPlaced();
+    }
+  }
+
+  async function caEraseCursor() {
+    const r = await post('/api/custom-assets/erase-cursor');
+    if (r.ok) {
+      msg(r.removed ? `Erased ${r.removed} custom asset(s) — ${r.count} remain` : 'No custom asset at cursor');
+      refreshCaPlaced();
+    }
+  }
+
+  async function caClearAll() {
+    if (!confirm('Remove ALL custom asset placements from this map?')) return;
+    await post('/api/custom-assets/clear');
+    refreshCaPlaced();
+    msg('All custom asset placements cleared');
+  }
+
+  async function refreshCaPlaced() {
+    try {
+      const list = await (await fetch('/api/custom-assets')).json();
+      const div = el('ca_placed');
+      if (list.length === 0) {
+        div.style.display = 'none';
+        div.innerHTML = '';
+      } else {
+        div.style.display = '';
+        div.innerHTML = '<table style=\"width:100%;border-collapse:collapse;font-size:11px\">' +
+          '<tr><th style=\"text-align:left;color:#7a7ab0\">Bundle</th>' +
+          '<th style=\"text-align:left;color:#7a7ab0\">Asset</th>' +
+          '<th style=\"text-align:left;color:#7a7ab0\">Tile</th></tr>' +
+          list.map(p =>
+            `<tr><td>${esc(p.bundle)}</td><td>${esc(p.asset)}</td>` +
+            `<td>(${p.x},${p.y},L${p.layer})</td></tr>`
+          ).join('') + '</table>';
+      }
+      const cnt = el('ca_count');
+      if (cnt) cnt.textContent = list.length ? `(${list.length} placed)` : '';
+    } catch(e) {}
+  }
+
+  /* ---- gameplay tab ---- */
 async function refreshGameplay() {
   try {
     const f = await (await fetch('/api/floors')).json();
@@ -1584,6 +1690,7 @@ async function poll() {
       (s.cursor ? ` — cursor (${s.cursor.x},${s.cursor.y})` : '') +
       ` — fences ${s.fences}, links ${s.triggers}, tiles ${s.modTiles}` +
       (s.animatedTiles ? `, animated ${s.animatedTiles}` : '') +
+      (s.customAssets ? `, custom ${s.customAssets}` : '') +
       (s.missingAtlases && s.missingAtlases.length
         ? ` — ⚠ missing atlases: ${s.missingAtlases.join(', ')} (harvest their sets!)` : '') +
       (s.tool && s.tool !== 'none' ? ` — TOOL ${s.tool}: ${s.toolHint}` : '');
@@ -2958,9 +3065,12 @@ padMain();
 poll();
 loadPrefs();
 loadBlocks();
+refreshCaBundles();
+refreshCaPlaced();
 setInterval(() => {
   if (el('page_gameplay').classList.contains('on')) refreshGameplay();
   if (el('page_tilesets').classList.contains('on')) refreshTilesets();
+  if (el('page_tools').classList.contains('on')) refreshCaPlaced();
 }, 3000);
 </script>
 </body>

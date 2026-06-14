@@ -640,6 +640,167 @@ namespace MapEditorMod.WebUi
                     }));
                     return 200;
                 }
+                // /api/custom-assets/bundles — list bundle filenames in the bundles folder
+                if (path == "/api/custom-assets/bundles")
+                {
+                    string[] names = CustomAssets.ListBundles();
+                    var sb = new StringBuilder("[");
+                    for (int i = 0; i < names.Length; i++)
+                    {
+                        if (i > 0) sb.Append(",");
+                        sb.Append(Quote(names[i]));
+                    }
+                    sb.Append("]");
+                    body = Encoding.UTF8.GetBytes(sb.ToString());
+                    return 200;
+                }
+                // /api/custom-assets/list?bundle=<name> — list asset names in a bundle
+                if (path == "/api/custom-assets/list")
+                {
+                    string bundleName = Get(query, "bundle");
+                    if (bundleName.Length == 0)
+                    {
+                        body = Encoding.UTF8.GetBytes("{\"error\":\"bundle required\"}");
+                        return 400;
+                    }
+                    string[] assets = MainThread.Run(() => CustomAssets.ListAssets(bundleName));
+                    var sb = new StringBuilder("[");
+                    for (int i = 0; i < assets.Length; i++)
+                    {
+                        if (i > 0) sb.Append(",");
+                        sb.Append(Quote(assets[i]));
+                    }
+                    sb.Append("]");
+                    body = Encoding.UTF8.GetBytes(sb.ToString());
+                    return 200;
+                }
+                // /api/custom-assets/place?bundle=<n>&asset=<n>&x=<>&y=<>&layer=<>
+                if (method == "POST" && path == "/api/custom-assets/place")
+                {
+                    string bundleName = Get(query, "bundle");
+                    string assetName  = Get(query, "asset");
+                    int caX     = GetInt(query, "x", -1);
+                    int caY     = GetInt(query, "y", -1);
+                    int caLayer = GetInt(query, "layer", -1);
+                    float offX  = GetFloat(query, "offX", 0f);
+                    float offY2 = GetFloat(query, "offY", 0f);
+                    float offZ  = GetFloat(query, "offZ", 0f);
+                    float rotY  = GetFloat(query, "rotY", 0f);
+                    if (bundleName.Length == 0 || assetName.Length == 0 ||
+                        caX < 0 || caY < 0 || caLayer < 0)
+                    {
+                        body = Encoding.UTF8.GetBytes(
+                            "{\"ok\":false,\"msg\":\"bundle, asset, x, y and layer required\"}");
+                        return 400;
+                    }
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        CustomAssetPlacements.Place(bundleName, assetName,
+                            caX, caY, caLayer, offX, offY2, offZ, rotY);
+                        return "{\"ok\":true,\"count\":" +
+                            CustomAssetPlacements.Count + "}";
+                    }));
+                    return 200;
+                }
+                // /api/custom-assets/place-cursor?bundle=<n>&asset=<n> — place at editor cursor
+                if (method == "POST" && path == "/api/custom-assets/place-cursor")
+                {
+                    string bundleName = Get(query, "bundle");
+                    string assetName  = Get(query, "asset");
+                    float offX  = GetFloat(query, "offX", 0f);
+                    float offY2 = GetFloat(query, "offY", 0f);
+                    float offZ  = GetFloat(query, "offZ", 0f);
+                    float rotY  = GetFloat(query, "rotY", 0f);
+                    if (bundleName.Length == 0 || assetName.Length == 0)
+                    {
+                        body = Encoding.UTF8.GetBytes(
+                            "{\"ok\":false,\"msg\":\"bundle and asset required\"}");
+                        return 400;
+                    }
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        int cx, cy;
+                        if (!Placement.GetCursorTile(out cx, out cy))
+                            return "{\"ok\":false,\"msg\":\"cursor not on the map\"}";
+                        int layer = Grid.CurrentEditorLayer;
+                        if (layer < 0) layer = 0;
+                        CustomAssetPlacements.Place(bundleName, assetName,
+                            cx, cy, layer, offX, offY2, offZ, rotY);
+                        return "{\"ok\":true,\"x\":" + cx + ",\"y\":" + cy +
+                            ",\"layer\":" + layer +
+                            ",\"count\":" + CustomAssetPlacements.Count + "}";
+                    }));
+                    return 200;
+                }
+                // /api/custom-assets/erase?x=<>&y=<>&layer=<>
+                if (method == "POST" && path == "/api/custom-assets/erase")
+                {
+                    int caX     = GetInt(query, "x", -1);
+                    int caY     = GetInt(query, "y", -1);
+                    int caLayer = GetInt(query, "layer", -1);
+                    if (caX < 0 || caY < 0 || caLayer < 0)
+                    {
+                        body = Encoding.UTF8.GetBytes(
+                            "{\"ok\":false,\"msg\":\"x, y and layer required\"}");
+                        return 400;
+                    }
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        int removed = CustomAssetPlacements.EraseAt(caX, caY, caLayer);
+                        return "{\"ok\":true,\"removed\":" + removed +
+                            ",\"count\":" + CustomAssetPlacements.Count + "}";
+                    }));
+                    return 200;
+                }
+                // /api/custom-assets/erase-cursor — erase at editor cursor
+                if (method == "POST" && path == "/api/custom-assets/erase-cursor")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        int cx, cy;
+                        if (!Placement.GetCursorTile(out cx, out cy))
+                            return "{\"ok\":false,\"msg\":\"cursor not on the map\"}";
+                        int layer = Grid.CurrentEditorLayer;
+                        if (layer < 0) layer = 0;
+                        int removed = CustomAssetPlacements.EraseAt(cx, cy, layer);
+                        return "{\"ok\":true,\"removed\":" + removed +
+                            ",\"count\":" + CustomAssetPlacements.Count + "}";
+                    }));
+                    return 200;
+                }
+                // /api/custom-assets/clear
+                if (method == "POST" && path == "/api/custom-assets/clear")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        CustomAssetPlacements.Clear();
+                        return "{\"ok\":true}";
+                    }));
+                    return 200;
+                }
+                // /api/custom-assets — list all placed custom assets
+                if (path == "/api/custom-assets")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        var sb = new StringBuilder("[");
+                        bool first = true;
+                        foreach (var p in CustomAssetPlacements.All())
+                        {
+                            if (!first) sb.Append(",");
+                            first = false;
+                            sb.Append("{\"bundle\":").Append(Quote(p.BundleName))
+                              .Append(",\"asset\":").Append(Quote(p.AssetName))
+                              .Append(",\"x\":").Append(p.X)
+                              .Append(",\"y\":").Append(p.Y)
+                              .Append(",\"layer\":").Append(p.Layer)
+                              .Append("}");
+                        }
+                        sb.Append("]");
+                        return sb.ToString();
+                    }));
+                    return 200;
+                }
                 body = Encoding.UTF8.GetBytes("{\"error\":\"not found\"}");
                 return 404;
             }
@@ -674,6 +835,7 @@ namespace MapEditorMod.WebUi
             sb.Append(",\"triggers\":").Append(Triggers.All.Count);
             sb.Append(",\"modTiles\":").Append(ModTiles.Count);
             sb.Append(",\"animatedTiles\":").Append(AnimatedModTiles.Count);
+            sb.Append(",\"customAssets\":").Append(CustomAssetPlacements.Count);
             sb.Append(",\"editorLayer\":").Append(Grid.CurrentEditorLayer);
             sb.Append(",\"nativeEditorLayer\":").Append(Grid.CurrentNativeEditorLayer);
             sb.Append(",\"geometryFeatureVersion\":").Append(ModExtras.Current.GeometryFeatureVersion);
@@ -1621,6 +1783,15 @@ namespace MapEditorMod.WebUi
         {
             int value;
             return int.TryParse(Get(query, key), out value) ? value : fallback;
+        }
+
+        private static float GetFloat(Dictionary<string, string> query, string key, float fallback)
+        {
+            float value;
+            return float.TryParse(Get(query, key),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out value) ? value : fallback;
         }
 
         private static string Quote(string value)

@@ -170,17 +170,35 @@ Programmatic entry into the editor flow. Main thread only.
 
 ### `CustomAssets`
 
-AssetBundle loading. Bundles must be built with a **Unity 5.5-compatible**
-pipeline or `LoadFromFile` returns null. Suggested location:
-`BepInEx/plugins/E2EMapEditor/bundles/`.
+AssetBundle loading and placement. Bundles must be built with a **Unity 5.5-compatible**
+pipeline or `LoadFromFile` returns null. See `docs/bundle-build-pipeline.md`.
+Default location: `BepInEx/plugins/E2EMapEditor/bundles/`.
 
+- `BundlesFolder` — absolute path to the bundles directory (created on first access).
+- `ListBundles()` → `string[]` — filenames of all bundles in the bundles folder.
+- `ListAssets(bundlePathOrName)` → `string[]` — asset names inside a bundle
+  (pass a filename or full path; names are stripped of prefix/extension for display).
 - `LoadBundle(path)` — load (or return the cached) bundle.
 - `Load<T>(bundlePath, assetName)` — asset out of a bundle, or null.
 - `Spawn(bundlePath, assetName, position)` — instantiate a prefab.
 - `UnloadAll(destroyLoadedObjects = false)`
 
-> Note: this is a loader only. Custom assets are **not yet** placeable as map
-> content or persisted in the map sidecar — that part of Phase 7 is open.
+### `CustomAssetPlacements`
+
+Map-persistent custom asset placements. Each placement ties a bundle+asset to a
+tile coordinate. Instances are spawned when entering the editor and destroyed on
+exit. Persisted in the sidecar `[custom_assets]` section.
+
+- `Initialise()` — wire save/load hooks (called by the mod on startup).
+- `Place(bundleName, assetName, x, y, layer, offX, offY, offZ, rotY)` — place a
+  prefab at a tile; replaces any existing placement at the same tile.
+- `EraseAt(x, y, layer)` → int — remove placement and destroy instance; returns count removed.
+- `GetAt(x, y, layer)` → `Placement?` — query placement at a tile.
+- `Clear()` — remove all placements and instances.
+- `SpawnAll()` / `DestroyAll()` — manual lifecycle control.
+- `All()` / `Count` / `Version`
+
+`Placement` fields: `BundleName`, `AssetName`, `X`, `Y`, `Layer`, `OffX`, `OffY`, `OffZ`, `RotY`.
 
 ---
 
@@ -366,6 +384,14 @@ generally return `{"ok":bool}` or `{"ok":bool,"msg":"…"}`.
 | POST | `/api/geometry/reset` | — | reset to vanilla 6-layer 120×120 layout |
 | GET | `/api/debug/floor-registry` | — | dump `FloorTypeRegistry` state: physical→type map and virtual order |
 | GET | `/api/debug/virtual-floors` | — | list all virtual layers with index, name, type, backingLayer, hidden |
+| GET | `/api/custom-assets/bundles` | — | list bundle filenames in `BepInEx/plugins/E2EMapEditor/bundles/` |
+| GET | `/api/custom-assets/list` | `bundle` | list asset names inside the named bundle |
+| GET | `/api/custom-assets` | — | list all placements: `[{bundle, asset, x, y, layer}]` |
+| POST | `/api/custom-assets/place` | `bundle`, `asset`, `x`, `y`, `layer`; optional `offX`, `offY`, `offZ`, `rotY` | place a custom asset at a tile |
+| POST | `/api/custom-assets/place-cursor` | `bundle`, `asset`; optional `offX`, `offY`, `offZ`, `rotY` | place at the current editor cursor tile |
+| POST | `/api/custom-assets/erase` | `x`, `y`, `layer` | erase custom asset at a tile |
+| POST | `/api/custom-assets/erase-cursor` | — | erase at the current editor cursor tile |
+| POST | `/api/custom-assets/clear` | — | clear all custom asset placements |
 | POST | `/api/cheat` | `name=heal\|energy\|money\|stealth\|ko-guards\|ko-dogs` | run a play-mode cheat |
 | POST | `/api/dev/skip-title` | — | dismiss the "press spacebar" title screen |
 | POST | `/api/dev/enter-editor` | `file` (optional) | enter the level editor (empty `file` = new map) |

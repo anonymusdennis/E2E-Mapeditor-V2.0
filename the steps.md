@@ -182,11 +182,12 @@ output, V0 feature list is written.
     link tool; arrows visualize links)
   - runtime: E on a button tile fires its links — action set is currently
     fence toggle only (doors etc. = future actions)
-- [ ] Custom assets in maps via AssetBundles (Unity 5.5-compatible build
-      pipeline) — **only partially done:** `Editor.CustomAssets` can load
-      bundles and spawn prefabs at runtime, but custom assets are not yet
-      placeable map content: nothing persists them to the sidecar, there is
-      no editor UI, and no Unity 5.5 bundle build pipeline exists
+- [x] Custom assets in maps via AssetBundles (Unity 5.5-compatible build
+      pipeline) — `CustomAssetPlacements` tracks placed prefabs per tile,
+      persists them in the sidecar `[custom_assets]` section, spawns/destroys
+      instances with editor lifecycle. Web API (`/api/custom-assets/*`) and
+      a Tools-tab UI card let you pick a bundle+asset and place at the cursor.
+      Unity 5.5 bundle build: see `docs/bundle-build-pipeline.md`.
 - [x] Persistence: mod-extras sidecar next to `Level.dat`
       (`Level.e2e` text format) + "requires mod" flag
 - [x] Maps without mod-extras stay 100% vanilla-compatible (sidecar is
