@@ -78,6 +78,7 @@ namespace E2EApi.Features
         private static int _lastNativeLayer = -1;
         private static bool _virtualSelectionChanged;
         private static string _loadMismatchWarning;
+        private static readonly List<VirtualLayer> _trashBin = new List<VirtualLayer>();
 
         public static event Action Changed;
 
@@ -91,6 +92,8 @@ namespace E2EApi.Features
         public static int SelectedVirtualLayerId => GetLayer(SelectedVirtualLayerIndex).Id;
         public static string CompatibilityHash => ComputeHash(_current);
         public static int Version { get; private set; }
+        public static IReadOnlyList<VirtualLayer> TrashBin => _trashBin;
+        public static int TrashCount => _trashBin.Count;
         public static bool IsNativeCompatible =>
             Width == NativeWidth && Height == NativeHeight && OriginX == 0 &&
             OriginY == 0 && LayerCount == NativeLayerCount;
@@ -129,6 +132,43 @@ namespace E2EApi.Features
                 case VirtualLayerType.Roof: return 5;
                 default: return 1;
             }
+        }
+
+        /// <summary>
+        /// Picks the least-used native backing layer for a new virtual layer of the given type.
+        /// Prefers type-appropriate layers first so that same-type virtual layers don't all
+        /// collide on the same native slot.
+        /// </summary>
+        private static int SmartBackingLayer(VirtualLayerType type)
+        {
+            int[] preferred;
+            switch (type)
+            {
+                case VirtualLayerType.Underground: preferred = new[] { 0, 1, 2, 3, 4, 5 }; break;
+                case VirtualLayerType.Vent:        preferred = new[] { 2, 4, 1, 3, 0, 5 }; break;
+                case VirtualLayerType.Roof:        preferred = new[] { 5, 3, 1, 0, 2, 4 }; break;
+                default:                           preferred = new[] { 1, 3, 0, 2, 4, 5 }; break;
+            }
+            var usage = new int[NativeLayerCount];
+            foreach (var layer in _current.Layers)
+            {
+                if (layer.BackingLayer >= 0 && layer.BackingLayer < NativeLayerCount)
+                {
+                    usage[layer.BackingLayer]++;
+                }
+            }
+            int best = preferred[0];
+            int bestUsage = int.MaxValue;
+            foreach (int n in preferred)
+            {
+                if (usage[n] < bestUsage)
+                {
+                    bestUsage = usage[n];
+                    best = n;
+                    if (bestUsage == 0) break;
+                }
+            }
+            return best;
         }
 
         public static void SelectLayer(int index)
@@ -180,7 +220,7 @@ namespace E2EApi.Features
                 Id = id,
                 Name = DefaultName(type, state.Layers.Count),
                 Type = type,
-                BackingLayer = NativeLayerForType(type),
+                BackingLayer = SmartBackingLayer(type),
             });
             Apply(state);
             SelectLayer(state.Layers.Count - 1);
@@ -194,8 +234,41 @@ namespace E2EApi.Features
             }
             var state = _current.Clone();
             index = Math.Max(0, Math.Min(index, state.Layers.Count - 1));
+            _trashBin.Add(state.Layers[index].Clone());
             state.Layers.RemoveAt(index);
             Apply(state);
+        }
+
+        /// <summary>Restore a previously removed layer from the trash bin.</summary>
+        public static void RestoreFromTrash(int trashIndex)
+        {
+            if (trashIndex < 0 || trashIndex >= _trashBin.Count)
+            {
+                return;
+            }
+            var trashed = _trashBin[trashIndex].Clone();
+            _trashBin.RemoveAt(trashIndex);
+            var state = _current.Clone();
+            int id = 0;
+            foreach (var layer in state.Layers)
+            {
+                if (layer.Id >= id) id = layer.Id + 1;
+            }
+            trashed.Id = id;
+            state.Layers.Add(trashed);
+            Apply(state);
+            SelectLayer(state.Layers.Count - 1);
+        }
+
+        /// <summary>Permanently discard all trashed layers.</summary>
+        public static void ClearTrash()
+        {
+            if (_trashBin.Count == 0)
+            {
+                return;
+            }
+            _trashBin.Clear();
+            FireChanged();
         }
 
         public static void MoveLayer(int index, int delta)
@@ -219,7 +292,7 @@ namespace E2EApi.Features
             var state = _current.Clone();
             index = Math.Max(0, Math.Min(index, state.Layers.Count - 1));
             state.Layers[index].Type = type;
-            state.Layers[index].BackingLayer = NativeLayerForType(type);
+            state.Layers[index].BackingLayer = SmartBackingLayer(type);
             state.Layers[index].Name = DefaultName(type, index);
             Apply(state);
         }
@@ -328,26 +401,38 @@ namespace E2EApi.Features
         private static void OnSaving(ModExtras extras)
         {
             extras.ClearSection(SectionName);
+            extras.ClearSection(SectionName + "_trash");
             if (IsDefault(_current))
             {
                 extras.GeometryFeatureVersion = 0;
                 extras.GeometryHash = null;
-                return;
             }
-            var section = extras.Section(SectionName);
-            section.Add("version=" + FormatVersion);
-            section.Add("selected=" + SelectedVirtualLayerIndex);
-            section.Add("hash=" + CompatibilityHash);
-            section.Add("bounds=" + _current.Width + "," + _current.Height + "," +
-                _current.OriginX + "," + _current.OriginY);
-            foreach (var layer in _current.Layers)
+            else
             {
-                section.Add("layer=" + layer.Id + "|" + layer.Type + "|" +
-                    layer.BackingLayer + "|" + Escape(layer.Name));
+                var section = extras.Section(SectionName);
+                section.Add("version=" + FormatVersion);
+                section.Add("selected=" + SelectedVirtualLayerIndex);
+                section.Add("hash=" + CompatibilityHash);
+                section.Add("bounds=" + _current.Width + "," + _current.Height + "," +
+                    _current.OriginX + "," + _current.OriginY);
+                foreach (var layer in _current.Layers)
+                {
+                    section.Add("layer=" + layer.Id + "|" + layer.Type + "|" +
+                        layer.BackingLayer + "|" + Escape(layer.Name));
+                }
+                extras.RequiresMod = true;
+                extras.GeometryFeatureVersion = FormatVersion;
+                extras.GeometryHash = CompatibilityHash;
             }
-            extras.RequiresMod = true;
-            extras.GeometryFeatureVersion = FormatVersion;
-            extras.GeometryHash = CompatibilityHash;
+            if (_trashBin.Count > 0)
+            {
+                var trashSection = extras.Section(SectionName + "_trash");
+                foreach (var layer in _trashBin)
+                {
+                    trashSection.Add("layer=" + layer.Id + "|" + layer.Type + "|" +
+                        layer.BackingLayer + "|" + Escape(layer.Name));
+                }
+            }
         }
 
         private static void OnLoaded(ModExtras extras)
@@ -361,6 +446,30 @@ namespace E2EApi.Features
             {
                 _loadMismatchWarning =
                     "Map geometry hash mismatch — every multiplayer client needs the same Level.e2e sidecar.";
+            }
+            _trashBin.Clear();
+            var trashSection = extras.Section(SectionName + "_trash");
+            foreach (string raw in trashSection)
+            {
+                if (raw.StartsWith("layer="))
+                {
+                    string[] p = raw.Substring("layer=".Length).Split('|');
+                    if (p.Length >= 4)
+                    {
+                        int id, backing;
+                        VirtualLayerType type;
+                        if (!int.TryParse(p[0], out id)) id = _trashBin.Count;
+                        type = ParseLayerType(p[1]);
+                        if (!int.TryParse(p[2], out backing)) backing = NativeLayerForType(type);
+                        _trashBin.Add(new VirtualLayer
+                        {
+                            Id = id,
+                            Type = type,
+                            BackingLayer = backing,
+                            Name = Unescape(p[3]),
+                        });
+                    }
+                }
             }
             _lastNativeLayer = -1;
             SyncNativeEditorLayer();
@@ -566,7 +675,7 @@ namespace E2EApi.Features
                 case VirtualLayerType.Underground: return "Underground " + index;
                 case VirtualLayerType.Vent: return "Vent " + index;
                 case VirtualLayerType.Roof: return "Roof " + index;
-                default: return "Floor " + index;
+                default: return "Ground " + index;
             }
         }
 

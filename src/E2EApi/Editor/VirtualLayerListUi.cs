@@ -10,19 +10,20 @@ namespace E2EApi.Editor
     /// <summary>
     /// Replaces the fixed six-layer vanilla tab strip with a scrollable list
     /// driven by <see cref="MapGeometry"/> virtual layers.
+    /// Plain Button+Image+Text rows are used instead of cloning T17Button to
+    /// avoid private-field initialization ordering issues and hitbox mismatches.
     /// </summary>
     public static class VirtualLayerListUi
     {
         private const float RowSpacing = 2f;
-        private const float MaxViewportHeight = 280f;
+        private const float RowHeight = 34f;
 
         private static bool _built;
         private static GameObject _scrollRoot;
         private static ScrollRect _scroll;
         private static RectTransform _content;
-        private static T17Button _template;
         private static T17TabPanel _vanillaTabGroup;
-        private static readonly List<T17Button> _buttons = new List<T17Button>();
+        private static readonly List<Button> _buttons = new List<Button>();
 
         public static bool IsActive => _built;
 
@@ -54,7 +55,6 @@ namespace E2EApi.Editor
                 }
             }
             _built = false;
-            _template = null;
             _vanillaTabGroup = null;
         }
 
@@ -102,12 +102,8 @@ namespace E2EApi.Editor
             {
                 return false;
             }
-            _template = _vanillaTabGroup.m_Buttons[0];
-            if (_template == null)
-            {
-                return false;
-            }
 
+            // Hide all vanilla tab buttons — we replace them entirely.
             foreach (var button in _vanillaTabGroup.m_Buttons)
             {
                 if (button != null)
@@ -116,7 +112,10 @@ namespace E2EApi.Editor
                 }
             }
 
-            var anchor = _template.transform.parent;
+            // Parent our scroll root to the same container as the vanilla buttons,
+            // filling it completely. LayoutElement.ignoreLayout prevents the parent's
+            // VerticalLayoutGroup (if any) from fighting our stretch anchors.
+            var anchor = _vanillaTabGroup.m_Buttons[0].transform.parent;
             if (anchor == null)
             {
                 anchor = _vanillaTabGroup.transform;
@@ -125,8 +124,12 @@ namespace E2EApi.Editor
             _scrollRoot = new GameObject("E2E_VirtualLayerList");
             _scrollRoot.transform.SetParent(anchor, false);
             var rootRect = _scrollRoot.AddComponent<RectTransform>();
-            CopyRect(_template.GetComponent<RectTransform>(), rootRect);
-            rootRect.sizeDelta = new Vector2(rootRect.sizeDelta.x, MaxViewportHeight);
+            rootRect.anchorMin = Vector2.zero;
+            rootRect.anchorMax = Vector2.one;
+            rootRect.offsetMin = Vector2.zero;
+            rootRect.offsetMax = Vector2.zero;
+            var rootLayoutEl = _scrollRoot.AddComponent<LayoutElement>();
+            rootLayoutEl.ignoreLayout = true;
 
             _scroll = _scrollRoot.AddComponent<ScrollRect>();
             _scroll.horizontal = false;
@@ -169,45 +172,78 @@ namespace E2EApi.Editor
 
         private static void RebuildButtons()
         {
-            foreach (var button in _buttons)
+            // DestroyImmediate avoids stale child references within the same frame.
+            foreach (var btn in _buttons)
             {
-                if (button != null)
+                if (btn != null)
                 {
-                    Object.Destroy(button.gameObject);
+                    Object.DestroyImmediate(btn.gameObject);
                 }
             }
             _buttons.Clear();
 
             var state = MapGeometry.Current;
             int selected = MapGeometry.SelectedVirtualLayerIndex;
-            float rowHeight = _template.GetComponent<RectTransform>().sizeDelta.y;
-            if (rowHeight <= 0f)
-            {
-                rowHeight = 28f;
-            }
 
             for (int i = 0; i < state.Layers.Count; i++)
             {
-                int index = i;
+                int capturedIndex = i;
                 var layer = state.Layers[i];
-                var clone = Object.Instantiate(_template.gameObject);
-                clone.name = "E2E_Layer_" + i;
-                clone.transform.SetParent(_content, false);
-                clone.SetActive(true);
+                bool isSelected = (i == selected);
 
-                var rect = clone.GetComponent<RectTransform>();
-                rect.sizeDelta = new Vector2(rect.sizeDelta.x, rowHeight);
+                var rowGo = new GameObject("E2E_Layer_" + i);
+                rowGo.transform.SetParent(_content, false);
 
-                var button = clone.GetComponent<T17Button>();
-                SetLabel(button, FormatLabel(i, layer));
-                StyleButton(button, i == selected);
+                var le = rowGo.AddComponent<LayoutElement>();
+                le.minHeight = RowHeight;
+                le.preferredHeight = RowHeight;
+                le.flexibleHeight = 0f;
 
-                button.onClick.RemoveAllListeners();
-                button.onClick.AddListener(() => SelectLayer(index));
-                _buttons.Add(button);
+                var bg = rowGo.AddComponent<Image>();
+
+                var btn = rowGo.AddComponent<Button>();
+                btn.targetGraphic = bg;
+                ApplyButtonStyle(btn, bg, isSelected);
+                btn.onClick.AddListener(() => SelectLayer(capturedIndex));
+
+                var textGo = new GameObject("Label");
+                textGo.transform.SetParent(rowGo.transform, false);
+                var textRect = textGo.AddComponent<RectTransform>();
+                textRect.anchorMin = Vector2.zero;
+                textRect.anchorMax = Vector2.one;
+                textRect.offsetMin = new Vector2(8f, 2f);
+                textRect.offsetMax = new Vector2(-4f, -2f);
+                var label = textGo.AddComponent<Text>();
+                label.text = FormatLabel(i, layer);
+                label.fontSize = 11;
+                label.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                label.color = Color.white;
+                label.alignment = TextAnchor.MiddleLeft;
+                label.horizontalOverflow = HorizontalWrapMode.Overflow;
+                label.verticalOverflow = VerticalWrapMode.Truncate;
+                label.raycastTarget = false;
+
+                _buttons.Add(btn);
             }
 
             LayoutRebuilder.ForceRebuildLayoutImmediate(_content);
+        }
+
+        private static void ApplyButtonStyle(Button btn, Image bg, bool selected)
+        {
+            var normalColor = selected
+                ? new Color(0.30f, 0.50f, 0.90f, 1f)
+                : new Color(0.18f, 0.18f, 0.24f, 1f);
+            var highlightColor = selected
+                ? new Color(0.40f, 0.60f, 1.00f, 1f)
+                : new Color(0.28f, 0.28f, 0.36f, 1f);
+            bg.color = normalColor;
+            var colors = btn.colors;
+            colors.normalColor = normalColor;
+            colors.highlightedColor = highlightColor;
+            colors.pressedColor = new Color(0.20f, 0.40f, 0.80f, 1f);
+            colors.fadeDuration = 0.05f;
+            btn.colors = colors;
         }
 
         private static void ScrollToSelected(int index)
@@ -247,55 +283,6 @@ namespace E2EApi.Editor
         private static string FormatLabel(int index, MapGeometry.VirtualLayer layer)
         {
             return index + ": " + layer.Name;
-        }
-
-        private static void SetLabel(T17Button button, string text)
-        {
-            if (button == null)
-            {
-                return;
-            }
-            if (button.m_ButtonText != null)
-            {
-                button.m_ButtonText.text = text;
-                return;
-            }
-            var label = button.GetComponentInChildren<Text>();
-            if (label != null)
-            {
-                label.text = text;
-            }
-        }
-
-        private static void StyleButton(T17Button button, bool selected)
-        {
-            if (button == null)
-            {
-                return;
-            }
-            var colors = button.colors;
-            if (selected)
-            {
-                colors.normalColor = new Color(0.45f, 0.65f, 0.95f, 1f);
-                colors.highlightedColor = new Color(0.55f, 0.75f, 1f, 1f);
-            }
-            else
-            {
-                colors.normalColor = new Color(0.28f, 0.28f, 0.34f, 1f);
-                colors.highlightedColor = new Color(0.38f, 0.38f, 0.46f, 1f);
-            }
-            button.colors = colors;
-        }
-
-        private static void CopyRect(RectTransform source, RectTransform target)
-        {
-            target.anchorMin = source.anchorMin;
-            target.anchorMax = source.anchorMax;
-            target.pivot = source.pivot;
-            target.anchoredPosition = source.anchoredPosition;
-            target.sizeDelta = source.sizeDelta;
-            target.offsetMin = source.offsetMin;
-            target.offsetMax = source.offsetMax;
         }
     }
 }
