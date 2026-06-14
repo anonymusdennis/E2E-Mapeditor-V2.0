@@ -348,8 +348,24 @@ generally return `{"ok":bool}` or `{"ok":bool,"msg":"…"}`.
 | POST | `/api/numsetting` | `name`, `value` (float) | set a numeric setting: `guardCap`, `zoomSteps`, `fenceDamage`, `windowWidth`, `windowHeight` |
 | GET | `/api/floors` | — | play-mode floor list: `index`, `name`, `start`, `hasMap` |
 | GET | `/api/map/{floor}.png` | — | floor map texture PNG (404 without one) |
-| GET | `/api/player` | — | local player snapshot: `present`, `name`, `health`, `energy`, `money`, `heat`, `infiniteEnergy`, `tile {x,y,floor}` |
-| POST | `/api/teleport` | `x`, `y`, `floor` | teleport the local player to a tile |
+| GET | `/api/map/v/{virtualIndex}.png` | — | map texture for a virtual layer (resolves to its backing physical floor; 404 if unavailable) |
+| GET | `/api/player` | — | local player snapshot: `present`, `name`, `health`, `energy`, `money`, `heat`, `infiniteEnergy`, `tile {x,y,floor,virtualLayer}` (`virtualLayer` is -1 on vanilla maps) |
+| POST | `/api/teleport` | `x`, `y`, `floor` (or `virtualLayer`) | teleport the local player to a tile; pass `virtualLayer` instead of `floor` on custom-geometry maps |
+| GET | `/api/geometry` | — | virtual layer geometry: `width`, `height`, `originX`, `originY`, `layers[]`, `selected`, `hash`, `nativeCompatible`, `warning` |
+| GET | `/api/layers` | — | alias for `/api/geometry` (virtual layer list + selected index) |
+| POST | `/api/layers/select` | `index` | select a virtual layer in the editor (editor must be open) |
+| POST | `/api/geometry/select` | `index` | select a virtual layer in the editor |
+| POST | `/api/geometry/add` | `type=Underground\|Ground\|Vent\|Roof` | add a virtual layer |
+| POST | `/api/geometry/remove` | `index` | move a virtual layer to the trash |
+| POST | `/api/geometry/move` | `index`, `delta` | reorder a virtual layer |
+| POST | `/api/geometry/duplicate` | `index` | duplicate a virtual layer |
+| POST | `/api/geometry/type` | `index`, `type` | change the virtual layer type |
+| POST | `/api/geometry/hide` | `index`, `hidden=true\|false` | hide/show a virtual layer in-game |
+| POST | `/api/geometry/restore` | `trashIndex` | restore a trashed virtual layer |
+| POST | `/api/geometry/bounds-delta` | `field`, `delta` | adjust map bounds (width/height/originX/originY) by a delta |
+| POST | `/api/geometry/reset` | — | reset to vanilla 6-layer 120×120 layout |
+| GET | `/api/debug/floor-registry` | — | dump `FloorTypeRegistry` state: physical→type map and virtual order |
+| GET | `/api/debug/virtual-floors` | — | list all virtual layers with index, name, type, backingLayer, hidden |
 | POST | `/api/cheat` | `name=heal\|energy\|money\|stealth\|ko-guards\|ko-dogs` | run a play-mode cheat |
 | POST | `/api/dev/skip-title` | — | dismiss the "press spacebar" title screen |
 | POST | `/api/dev/enter-editor` | `file` (optional) | enter the level editor (empty `file` = new map) |

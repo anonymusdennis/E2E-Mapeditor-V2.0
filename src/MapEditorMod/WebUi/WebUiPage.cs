@@ -575,6 +575,7 @@ namespace MapEditorMod.WebUi
     <div class='card'>
       <h2>Teleport — click the map</h2>
       <div class='row' id='floorBtns'><span class='hint'>floors appear in play mode</span></div>
+      <div class='row' id='virtualLayerBtns'></div>
       <div id='mapwrap'>
         <img id='mapimg' alt='floor map (play mode only)'
              onclick='mapClick(event)' onerror='mapError()'>
@@ -853,6 +854,7 @@ let prefs = { customFilters: [], order: [], customBlocks: [], customCategoryName
 let orderRank = {};                        // block id -> user rank
 let dragId = null;
 let curFloor = -1;
+let curVirtualLayer = -1;
 let floorsKnown = '';
 let mapTileSize = 8; // px per tile in the map texture (game generates 8)
 let lastState = null;
@@ -1290,15 +1292,38 @@ async function refreshGameplay() {
         }
       }
     }
+    // Virtual layer buttons (only shown when sidecar layers exist)
+    try {
+      const geom = await (await fetch('/api/layers')).json();
+      if (geom && geom.layers && geom.layers.length > 0) {
+        const vbEl = el('virtualLayerBtns');
+        if (vbEl) {
+          vbEl.innerHTML = geom.layers.map((lyr, vi) =>
+            `<button id='vl_${vi}' onclick='pickVirtualLayer(${vi},${lyr.backingLayer})'>` +
+            `#${vi} ${esc(lyr.name)}</button>`).join('');
+        }
+      }
+    } catch (_) { /* no virtual layers */ }
   } catch (e) { /* not reachable */ }
   refreshPlayer();
 }
 
 function pickFloor(i) {
   curFloor = i;
+  curVirtualLayer = -1;
   document.querySelectorAll(""[id^='fl_']"").forEach(b =>
     b.classList.toggle('active', b.id === 'fl_' + i));
+  document.querySelectorAll(""[id^='vl_']"").forEach(b => b.classList.remove('active'));
   el('mapimg').src = '/api/map/' + i + '.png?t=' + Date.now();
+}
+
+function pickVirtualLayer(vi, backingFloor) {
+  curVirtualLayer = vi;
+  curFloor = backingFloor;
+  document.querySelectorAll(""[id^='vl_']"").forEach(b =>
+    b.classList.toggle('active', b.id === 'vl_' + vi));
+  document.querySelectorAll(""[id^='fl_']"").forEach(b => b.classList.remove('active'));
+  el('mapimg').src = '/api/map/v/' + vi + '.png?t=' + Date.now();
 }
 
 function mapError() {
@@ -1317,7 +1342,9 @@ async function refreshPlayer() {
       `<span><b>${esc(p.name)}</b></span>` +
       `<span>❤ <b>${p.health}</b></span><span>⚡ <b>${p.energy}</b></span>` +
       `<span>$ <b>${p.money}</b></span><span>🔥 heat <b>${p.heat}</b></span>` +
-      (p.tile ? `<span>tile <b>(${p.tile.x},${p.tile.y})</b> floor <b>${p.tile.floor}</b></span>` : '');
+      (p.tile ? `<span>tile <b>(${p.tile.x},${p.tile.y})</b> floor <b>${p.tile.floor}</b>` +
+        (p.tile.virtualLayer >= 0 ? ` vLayer <b>${p.tile.virtualLayer}</b>` : '') +
+        `</span>` : '');
     el('s_infiniteEnergy').checked = p.infiniteEnergy;
     placeMarker(p.tile);
   } catch (e) { /* ignore */ }
@@ -1347,7 +1374,10 @@ async function mapClick(ev) {
   const maxY = geom.originY + geom.height - 1;
   const tx = Math.max(geom.originX, Math.min(maxX, Math.floor((px - 1) / mapTileSize)));
   const ty = Math.max(geom.originY, Math.min(maxY, Math.floor((img.naturalHeight - py - 1) / mapTileSize)));
-  await post(`/api/teleport?x=${tx}&y=${ty}&floor=${curFloor}`);
+  const url = curVirtualLayer >= 0
+    ? `/api/teleport?x=${tx}&y=${ty}&virtualLayer=${curVirtualLayer}`
+    : `/api/teleport?x=${tx}&y=${ty}&floor=${curFloor}`;
+  await post(url);
   refreshPlayer();
 }
 

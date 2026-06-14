@@ -387,6 +387,6 @@ namespace MapEditorMod
     {
         public const string Guid = "org.anonymusdennis.e2e.mapeditor";
         public const string Name = "E2E Map Editor";
-        public const string Version = "2.1.0";
+        public const string Version = "2.2.0";
     }
 }

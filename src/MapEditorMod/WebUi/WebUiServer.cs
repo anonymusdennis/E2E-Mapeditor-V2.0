@@ -514,6 +514,24 @@ namespace MapEditorMod.WebUi
                     body = Encoding.UTF8.GetBytes(MainThread.Run(GetFloorsJson));
                     return 200;
                 }
+                if (path.StartsWith("/api/map/v/"))
+                {
+                    int vi;
+                    if (!int.TryParse(path.Substring("/api/map/v/".Length).Replace(".png", ""), out vi))
+                    {
+                        body = Encoding.UTF8.GetBytes("{\"error\":\"bad virtual layer index\"}");
+                        return 400;
+                    }
+                    byte[] png = MainThread.Run(() => GameMap.GetVirtualLayerPng(vi), 10000);
+                    if (png == null)
+                    {
+                        body = Encoding.UTF8.GetBytes("{\"error\":\"no map texture for virtual layer\"}");
+                        return 404;
+                    }
+                    contentType = "image/png";
+                    body = png;
+                    return 200;
+                }
                 if (path.StartsWith("/api/map/"))
                 {
                     int floor;
@@ -537,7 +555,8 @@ namespace MapEditorMod.WebUi
                     int x = GetInt(query, "x", -1);
                     int y = GetInt(query, "y", -1);
                     int floor = GetInt(query, "floor", -1);
-                    body = Encoding.UTF8.GetBytes(MainThread.Run(() => DoTeleport(x, y, floor)));
+                    int virtualLayer = GetInt(query, "virtualLayer", -1);
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() => DoTeleport(x, y, floor, virtualLayer)));
                     return 200;
                 }
                 if (path == "/api/player")
@@ -561,6 +580,64 @@ namespace MapEditorMod.WebUi
                 {
                     string action = path.Substring("/api/geometry/".Length);
                     body = Encoding.UTF8.GetBytes(MainThread.Run(() => HandleGeometry(action, query)));
+                    return 200;
+                }
+                // /api/layers — cleaner alias for the virtual-layer list (same as /api/geometry)
+                if (path == "/api/layers")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() => MapGeometry.ToJson()));
+                    return 200;
+                }
+                // /api/layers/select?index=<n> — select a virtual layer in the editor
+                if (method == "POST" && path == "/api/layers/select")
+                {
+                    int idx = GetInt(query, "index", 0);
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        if (!E2EApi.Events.GameEvents.IsEditorActive)
+                            return "{\"ok\":false,\"msg\":\"open the level editor first\"}";
+                        MapGeometry.SelectLayer(idx);
+                        return "{\"ok\":true,\"selected\":" + MapGeometry.SelectedVirtualLayerIndex + "}";
+                    }));
+                    return 200;
+                }
+                // /api/debug/floor-registry — dump FloorTypeRegistry
+                if (path == "/api/debug/floor-registry")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        string dump = FloorTypeRegistry.Dump();
+                        return "{\"dump\":" + Quote(dump) + ",\"hasEntries\":" +
+                            (FloorTypeRegistry.HasEntries ? "true" : "false") + "}";
+                    }));
+                    return 200;
+                }
+                // /api/debug/virtual-floors — dump virtual layer list with registry state
+                if (path == "/api/debug/virtual-floors")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        var geom = MapGeometry.Current;
+                        if (geom == null)
+                            return "{\"layers\":[],\"hasEntries\":false}";
+                        var sb = new StringBuilder();
+                        sb.Append("{\"hasEntries\":");
+                        sb.Append(FloorTypeRegistry.HasEntries ? "true" : "false");
+                        sb.Append(",\"layers\":[");
+                        for (int vi = 0; vi < geom.Layers.Count; vi++)
+                        {
+                            var lyr = geom.Layers[vi];
+                            if (vi > 0) sb.Append(",");
+                            sb.Append("{\"index\":").Append(vi)
+                              .Append(",\"name\":").Append(Quote(lyr.Name ?? ""))
+                              .Append(",\"type\":").Append(Quote(lyr.Type.ToString()))
+                              .Append(",\"backingLayer\":").Append(lyr.BackingLayer)
+                              .Append(",\"hidden\":").Append(lyr.Hidden ? "true" : "false")
+                              .Append("}");
+                        }
+                        sb.Append("]}");
+                        return sb.ToString();
+                    }));
                     return 200;
                 }
                 body = Encoding.UTF8.GetBytes("{\"error\":\"not found\"}");
@@ -1291,8 +1368,8 @@ namespace MapEditorMod.WebUi
             {
                 return "{\"present\":false}";
             }
-            int x, y, floor;
-            bool hasTile = player.GetTile(out x, out y, out floor);
+            int x, y, floor, virtualLayer;
+            bool hasTile = player.GetTile(out x, out y, out floor, out virtualLayer);
             var sb = new StringBuilder();
             sb.Append("{\"present\":true");
             sb.Append(",\"name\":").Append(Quote(player.Name ?? ""));
@@ -1310,7 +1387,9 @@ namespace MapEditorMod.WebUi
             if (hasTile)
             {
                 sb.Append("{\"x\":").Append(x).Append(",\"y\":").Append(y)
-                  .Append(",\"floor\":").Append(floor).Append("}");
+                  .Append(",\"floor\":").Append(floor)
+                  .Append(",\"virtualLayer\":").Append(virtualLayer)
+                  .Append("}");
             }
             else
             {
@@ -1320,17 +1399,20 @@ namespace MapEditorMod.WebUi
             return sb.ToString();
         }
 
-        private static string DoTeleport(int x, int y, int floor)
+        private static string DoTeleport(int x, int y, int floor, int virtualLayer = -1)
         {
             var player = E2EApi.Players.Player.GetLocal();
             if (player == null || !player.IsValid)
             {
                 return "{\"ok\":false,\"msg\":\"no player pawn (start the map first)\"}";
             }
-            bool ok = player.TeleportToTile(x, y, floor);
-            return ok
-                ? "{\"ok\":true,\"msg\":\"teleported to (" + x + "," + y + ") floor " + floor + "\"}"
-                : "{\"ok\":false,\"msg\":\"teleport failed (bad tile/floor?)\"}";
+            bool ok = player.TeleportToTile(x, y, floor, virtualLayer);
+            if (!ok)
+                return "{\"ok\":false,\"msg\":\"teleport failed (bad tile/floor?)\"}";
+            string dest = virtualLayer >= 0
+                ? "(" + x + "," + y + ") virtual layer " + virtualLayer
+                : "(" + x + "," + y + ") floor " + floor;
+            return "{\"ok\":true,\"msg\":\"teleported to " + dest + "\"}";
         }
 
         private static string RunCheat(string name, string value)

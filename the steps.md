@@ -234,6 +234,44 @@ finished save carries the fallback, and the web UI browses all harvested sets.
 
 ---
 
+## Phase 7.6 — Virtual map layers (multi-floor geometry)
+
+**Goal:** maps can define more than 6 virtual layers sharing the game's 6
+physical floors, with per-character floor state tracked and exposed over the
+web API so scripts can navigate by virtual layer index.
+
+- [x] `MapGeometry` core: virtual layer list (`VirtualLayer`: id, name, type,
+      backingLayer, hidden), sidecar `[geometry]` section, `SelectLayer`,
+      `GetBackingLayer`, `ToJson`, `Apply`
+- [x] `FloorTypeRegistry`: runtime physical→virtualType mapping; rebuilt from
+      `MapGeometry.Apply()` and loaded from `[floor_type_map]` sidecar section
+- [x] `VirtualFloorState`: per-character virtual layer index stored in a
+      `ConditionalWeakTable`; `Set`/`TryGet` API
+- [x] Floor predicate patches: `IsVent`, `IsUnderground`, `IsGround`, `IsRoof`
+      use `FloorTypeRegistry` wrappers so custom types win over native enum
+- [x] Navigation patches: `FloorManager.UpAFloor`/`DownAFloor`,
+      `Character.CanAccessVent`, stair/ladder direction comparisons patched to
+      respect the virtual ordering
+- [x] Z-lookup patches: `Grid.TileToWorld` z-depth disambiguates shared-backing
+      virtual layers using `VirtualFloorState`
+- [x] `CharacterFloorPatch`: postfix patches write `VirtualFloorState` whenever
+      `Player.Teleport` or `Character.set_CurrentFloor`/`SetFloor` runs
+- [x] `Player.GetTile` virtual layer overload; `Player.TeleportToTile` virtual
+      layer overload (resolves backing layer, writes state on success)
+- [x] Web API: `GET /api/layers` alias, `POST /api/layers/select`,
+      `GET /api/map/v/{vi}.png`, updated `/api/player` (adds `virtualLayer`),
+      updated `POST /api/teleport` (accepts `virtualLayer`),
+      `GET /api/debug/floor-registry`, `GET /api/debug/virtual-floors`
+- [x] Web UI: `curVirtualLayer` state, virtual layer buttons in gameplay tab
+      (`pickVirtualLayer`), player stats show `vLayer`, `mapClick` sends
+      `virtualLayer` when active
+
+**Done when:** a map with shared-backing virtual layers lets the player
+navigate between them via the web UI, teleport to a tile on a specific virtual
+layer, and show the correct Z-depth in-game.
+
+---
+
 ## Phase 8 — Packaging and Windows validation
 
 **Goal:** anyone can install and use the mod; modders can use the API.
