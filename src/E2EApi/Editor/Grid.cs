@@ -70,7 +70,12 @@ namespace E2EApi.Editor
             {
                 return null;
             }
-            var world = tiles.WorldPositionFromTileIndex(y, x);
+            // In play mode the Rotorz tile system has row 0 at the TOP of the map
+            // (highest world y) and row count-1 at the BOTTOM (lowest world y).
+            // Our y convention is the opposite: y=0 is the southernmost tile.
+            // Convert: row = (OriginY + Height - 1) - y
+            int row = (OriginY + Height - 1) - y;
+            var world = tiles.WorldPositionFromTileIndex(row, x);
             world.z -= (layer - nativeLayer) * 0.08f;
             return world;
         }
@@ -113,6 +118,12 @@ namespace E2EApi.Editor
             {
                 return false;
             }
+            // In play mode the Rotorz tile system has row 0 at the TOP (highest
+            // world y). WorldPositionFromTileIndex(0,0,center:false) gives the
+            // corner of the top-left cell; subtracting that from world.y (which
+            // is positive-upward) and dividing by the cell height gives the row
+            // counted downward from the top.  We then convert that Rotorz row to
+            // our y convention (0 = southernmost tile).
             Vector3 origin = tiles.WorldPositionFromTileIndex(0, 0, center: false);
             Vector3 cell = tiles.CellSize;
             if (cell.x <= 0f || cell.y <= 0f)
@@ -120,7 +131,8 @@ namespace E2EApi.Editor
                 return false;
             }
             x = Mathf.FloorToInt((world.x - origin.x) / cell.x);
-            y = Mathf.FloorToInt((world.y - origin.y) / cell.y);
+            int rotorzRow = Mathf.FloorToInt((origin.y - world.y) / cell.y);
+            y = (OriginY + Height - 1) - rotorzRow;
             return x >= OriginX && x < OriginX + Width &&
                 y >= OriginY && y < OriginY + Height;
         }

@@ -116,6 +116,17 @@ namespace E2EApi.Features
                 e.Tick();
         }
 
+        /// <summary>
+        /// Invalidates the cached render state so the overlay is fully rebuilt on
+        /// the next <see cref="Tick"/> call. Call this on scene transitions (e.g.
+        /// playtest start/end) to ensure the correct world-space positions and
+        /// materials are re-computed for the new scene.
+        /// </summary>
+        internal static void InvalidateCache()
+        {
+            _builtFor = null;
+        }
+
         // ---- private ----
 
         private static void Rebuild(int editorLayer)

@@ -63,6 +63,19 @@ namespace E2EApi.Features
             }
         }
 
+        /// <summary>
+        /// Clears the cached lit sprite material so it is re-discovered from the
+        /// current scene on the next access. Call this whenever the active scene
+        /// changes (e.g. editor↔playtest transitions) so that custom tiles always
+        /// adopt the correct vanilla material rather than one from a previous scene
+        /// that may have been destroyed or that belongs to a different renderer set.
+        /// </summary>
+        internal static void ResetLitMaterial()
+        {
+            _litSpriteMaterial = null;
+            _litSearchAttempted = false;
+        }
+
         /// <summary>8×8 yellow/transparent checker, point-filtered.</summary>
         public static Texture2D CheckerTexture
         {
