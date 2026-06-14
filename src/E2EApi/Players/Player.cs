@@ -107,8 +107,9 @@ namespace E2EApi.Players
             {
                 return false;
             }
-            // Play mode rows grow downward in world space, so use the game's
-            // own converter rather than Grid.WorldToTile.
+            // In play mode the Rotorz tile system has row 0 at the TOP of the map
+            // (highest world y).  Use the game's own converter and then flip the row
+            // to our y convention (y=0 at the southernmost tile).
             var floors = FloorManager.GetInstance();
             if (floors != null && pawn.CurrentFloor != null)
             {
@@ -118,7 +119,7 @@ namespace E2EApi.Players
                         pawn.transform.position, out row, out column))
                 {
                     x = column;
-                    y = row;
+                    y = (Editor.Grid.OriginY + Editor.Grid.Height - 1) - row;
                     floor = pawn.CurrentFloor.m_FloorIndex;
                     return true;
                 }

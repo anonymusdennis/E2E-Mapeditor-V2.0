@@ -64,12 +64,13 @@ namespace E2EApi.Features
         }
 
         /// <summary>
-        /// Resets the cached lit sprite material so it is re-borrowed from the
-        /// new scene on the next access. Call this whenever a level is loaded or
-        /// unloaded so the material from the previous scene is not carried over
-        /// (which would break day/night lighting after a playtest transition).
+        /// Clears the cached lit sprite material so it is re-discovered from the
+        /// current scene on the next access. Call this whenever the active scene
+        /// changes (e.g. editor↔playtest transitions) so that custom tiles always
+        /// adopt the correct vanilla material rather than one from a previous scene
+        /// that may have been destroyed or that belongs to a different renderer set.
         /// </summary>
-        internal static void InvalidateMaterialCache()
+        internal static void ResetLitMaterial()
         {
             _litSpriteMaterial = null;
             _litSearchAttempted = false;

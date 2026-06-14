@@ -70,10 +70,11 @@ namespace E2EApi.Editor
             {
                 return null;
             }
-            // The Rotorz tile system row index may run top-to-bottom (row 0 = top =
-            // highest world Y), while our tile y runs bottom-to-top (y=0 = bottom).
-            // Detect the orientation once and convert if needed.
-            int row = TileYToRow(tiles, y);
+            // In play mode the Rotorz tile system has row 0 at the TOP of the map
+            // (highest world y) and row count-1 at the BOTTOM (lowest world y).
+            // Our y convention is the opposite: y=0 is the southernmost tile.
+            // Convert: row = (OriginY + Height - 1) - y
+            int row = (OriginY + Height - 1) - y;
             var world = tiles.WorldPositionFromTileIndex(row, x);
             world.z -= (layer - nativeLayer) * 0.08f;
             return world;
@@ -117,6 +118,12 @@ namespace E2EApi.Editor
             {
                 return false;
             }
+            // In play mode the Rotorz tile system has row 0 at the TOP (highest
+            // world y). WorldPositionFromTileIndex(0,0,center:false) gives the
+            // corner of the top-left cell; subtracting that from world.y (which
+            // is positive-upward) and dividing by the cell height gives the row
+            // counted downward from the top.  We then convert that Rotorz row to
+            // our y convention (0 = southernmost tile).
             Vector3 origin = tiles.WorldPositionFromTileIndex(0, 0, center: false);
             Vector3 cell = tiles.CellSize;
             if (cell.x <= 0f || cell.y <= 0f)
@@ -124,54 +131,11 @@ namespace E2EApi.Editor
                 return false;
             }
             x = Mathf.FloorToInt((world.x - origin.x) / cell.x);
-            // When the tile system runs top-to-bottom (row 0 = highest world Y),
-            // the origin corner is at the top and world Y decreases with row.
-            // Convert the raw row index back to our Y-up tile coordinate in that case.
-            bool yDown = IsTileSystemYDown(tiles);
-            if (yDown)
-            {
-                int row = Mathf.FloorToInt((origin.y - world.y) / cell.y);
-                y = tiles.RowCount - 1 - row;
-            }
-            else
-            {
-                y = Mathf.FloorToInt((world.y - origin.y) / cell.y);
-            }
+            int rotorzRow = Mathf.FloorToInt((origin.y - world.y) / cell.y);
+            y = (OriginY + Height - 1) - rotorzRow;
             return x >= OriginX && x < OriginX + Width &&
                 y >= OriginY && y < OriginY + Height;
         }
 
-        /// <summary>
-        /// Converts our Y-up tile coordinate (y=0 = bottom row) to the Rotorz row
-        /// index expected by <c>WorldPositionFromTileIndex</c>.  When the tile
-        /// system is configured top-to-bottom the row index is inverted.
-        /// </summary>
-        private static int TileYToRow(TileSystem tiles, int y)
-        {
-            return IsTileSystemYDown(tiles) ? (tiles.RowCount - 1 - y) : y;
-        }
-
-        // Cache the Y-down detection result per tile-system instance to avoid
-        // sampling two tile positions on every TileToWorld call.
-        private static TileSystem _cachedYDownSystem;
-        private static bool _cachedYDownResult;
-
-        /// <summary>
-        /// Returns true when the Rotorz tile system's row index runs
-        /// top-to-bottom (row 0 = highest world Y).
-        /// </summary>
-        private static bool IsTileSystemYDown(TileSystem tiles)
-        {
-            if (tiles == _cachedYDownSystem)
-            {
-                return _cachedYDownResult;
-            }
-            _cachedYDownSystem = tiles;
-            // If row 1 is below row 0 in world space (lower Y), system is Y-down.
-            _cachedYDownResult = tiles.RowCount > 1 &&
-                tiles.WorldPositionFromTileIndex(1, 0).y <
-                tiles.WorldPositionFromTileIndex(0, 0).y;
-            return _cachedYDownResult;
-        }
     }
 }

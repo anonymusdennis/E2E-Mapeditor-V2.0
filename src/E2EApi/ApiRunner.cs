@@ -32,7 +32,7 @@ namespace E2EApi
 
         private void Awake()
         {
-            Events.GameEvents.LevelLoaded += Features.OverlayLib.InvalidateMaterialCache;
+            Events.GameEvents.LevelLoaded += Features.OverlayLib.ResetLitMaterial;
         }
 
         private void Update()
