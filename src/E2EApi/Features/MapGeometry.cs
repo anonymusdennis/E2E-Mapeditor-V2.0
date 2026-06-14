@@ -155,6 +155,12 @@ namespace E2EApi.Features
         /// Prefers type-appropriate layers first so that same-type virtual layers don't all
         /// collide on the same native slot.
         /// </summary>
+        /// <param name="type">The virtual layer type for the new floor.</param>
+        /// <param name="excludeBackingLayer">
+        /// When ≥ 0, this backing-layer slot is skipped as a first choice so that a duplicate
+        /// or new layer never silently shares the exact same physical floor as its source.
+        /// Falls back to the excluded slot only when every other slot is equally (or more) used.
+        /// </param>
         /// <remarks>
         /// Priority rationale:
         ///   Underground → {0, 1, 2, 3, 4, 5} : native Underground first, then overflow upward
@@ -162,7 +168,7 @@ namespace E2EApi.Features
         ///   Roof        → {5, 3, 1, 0, 2, 4} : native Roof first, then upper floors, then lower
         ///   Ground      → {1, 3, 0, 2, 4, 5} : native GroundFloor/FirstFloor first, then rest
         /// </remarks>
-        private static int SmartBackingLayer(VirtualLayerType type)
+        private static int SmartBackingLayer(VirtualLayerType type, int excludeBackingLayer = -1)
         {
             int[] preferred;
             switch (type)
@@ -180,10 +186,13 @@ namespace E2EApi.Features
                     usage[layer.BackingLayer]++;
                 }
             }
-            int best = preferred[0];
+
+            // First pass: find the least-used slot that is NOT the excluded one.
+            int best = -1;
             int bestUsage = int.MaxValue;
             foreach (int n in preferred)
             {
+                if (n == excludeBackingLayer) continue;
                 if (usage[n] < bestUsage)
                 {
                     bestUsage = usage[n];
@@ -191,6 +200,30 @@ namespace E2EApi.Features
                     if (bestUsage == 0) break;
                 }
             }
+
+            // If no non-excluded slot exists (e.g. excludeBackingLayer covers all options),
+            // fall back to the excluded slot itself so we always return a valid index.
+            if (best < 0)
+            {
+                best = excludeBackingLayer >= 0 && excludeBackingLayer < NativeLayerCount
+                    ? excludeBackingLayer
+                    : preferred[0];
+            }
+            else if (excludeBackingLayer >= 0 && excludeBackingLayer < NativeLayerCount)
+            {
+                // Second pass: if the excluded slot is less used than our best non-excluded
+                // choice, override only when it would genuinely reduce sharing.
+                // (Prefer any non-excluded slot with equal or lower usage to avoid sharing.)
+                // We keep "best" (non-excluded) unless the excluded slot has strictly lower
+                // usage than every other option — which can only happen if bestUsage > 0.
+                // In that case the excluded slot is still the better physical choice.
+                if (usage[excludeBackingLayer] < bestUsage)
+                {
+                    // Every non-excluded slot is MORE used; reluctantly fall back.
+                    best = excludeBackingLayer;
+                }
+            }
+
             return best;
         }
 
@@ -342,12 +375,14 @@ namespace E2EApi.Features
             {
                 if (layer.Id >= id) id = layer.Id + 1;
             }
+            // Pick a new backing layer that is different from the source so the
+            // duplicate is a genuinely independent physical floor, not a shared alias.
             state.Layers.Insert(index + 1, new VirtualLayer
             {
                 Id = id,
                 Name = source.Name + " copy",
                 Type = source.Type,
-                BackingLayer = source.BackingLayer,
+                BackingLayer = SmartBackingLayer(source.Type, excludeBackingLayer: source.BackingLayer),
             });
             Apply(state);
             SelectLayer(index + 1);

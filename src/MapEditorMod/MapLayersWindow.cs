@@ -337,13 +337,25 @@ namespace MapEditorMod
         private string BuildLayerList()
         {
             var state = MapGeometry.Current;
+
+            // Count how many virtual layers share each backing layer so we can warn about sharing.
+            var backingUsage = new System.Collections.Generic.Dictionary<int, int>();
+            foreach (var layer in state.Layers)
+            {
+                int b = layer.BackingLayer;
+                backingUsage[b] = backingUsage.ContainsKey(b) ? backingUsage[b] + 1 : 1;
+            }
+
             var text = "";
             for (int i = 0; i < state.Layers.Count; i++)
             {
                 var layer = state.Layers[i];
                 string mark = i == MapGeometry.SelectedVirtualLayerIndex ? "> " : "  ";
+                int usage;
+                backingUsage.TryGetValue(layer.BackingLayer, out usage);
+                string sharedWarning = usage > 1 ? " [!SHARED]" : "";
                 text += mark + i + ": " + layer.Name + " [" + layer.Type +
-                    "] native " + layer.BackingLayer + "\n";
+                    "] native " + layer.BackingLayer + sharedWarning + "\n";
             }
             return text;
         }
