@@ -502,12 +502,12 @@ namespace MapEditorMod.WebUi
       <div class='hint'>When on (recommended), publishing a map that needs the mod writes a
         vanilla-safe Level_Finished.dat with ""NEEDS E2E MAPEDITOR MOD"" painted on the ground;
         the real map travels in the sidecar and is restored automatically on modded clients.
-        When off, vanilla players see the mod-free extras.</div>
+        When off, vanilla players see the map without the modded extras.</div>
     </div>
     <div class='card' id='mp_card'>
       <h2>Multiplayer status</h2>
       <div id='mp_status' class='hint'>Not in a multiplayer room.</div>
-      <div class='row' style='margin-top:8px;gap:6px' id='mp_actions' style='display:none'>
+      <div class='row' style='margin-top:8px;gap:6px;display:none' id='mp_actions'>
         <button onclick='mpAnnounce()' title='Tell other players in the room that this map requires the mod'>
           📡 Announce mod required
         </button>

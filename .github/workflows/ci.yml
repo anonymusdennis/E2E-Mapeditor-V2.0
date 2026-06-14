@@ -13,6 +13,8 @@ jobs:
   installer-linux:
     name: Installer (Linux)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -42,6 +44,8 @@ jobs:
   installer-windows:
     name: Installer (Windows)
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -71,6 +75,8 @@ jobs:
   docs-links:
     name: Docs link check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
