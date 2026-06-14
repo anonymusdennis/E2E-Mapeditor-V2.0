@@ -220,8 +220,16 @@ namespace MapEditorMod
 
             UiFactory.Button(btnRow.transform, "Save & Exit", () =>
             {
+                try
+                {
+                    EditorSession.Save();
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError("[E2E] Save failed before reload: " + ex.Message);
+                    return;
+                }
                 dialog.SetVisible(false);
-                EditorSession.Save();
                 GlobalStart.GetInstance().EndEditorLevel();
             });
             UiFactory.Button(btnRow.transform, "Cancel", () => dialog.SetVisible(false));

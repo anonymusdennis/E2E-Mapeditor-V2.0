@@ -139,6 +139,13 @@ namespace E2EApi.Features
         /// Prefers type-appropriate layers first so that same-type virtual layers don't all
         /// collide on the same native slot.
         /// </summary>
+        /// <remarks>
+        /// Priority rationale:
+        ///   Underground → {0, 1, 2, 3, 4, 5} : native Underground first, then overflow upward
+        ///   Vent        → {2, 4, 1, 3, 0, 5} : native vent slots first, then non-vents
+        ///   Roof        → {5, 3, 1, 0, 2, 4} : native Roof first, then upper floors, then lower
+        ///   Ground      → {1, 3, 0, 2, 4, 5} : native GroundFloor/FirstFloor first, then rest
+        /// </remarks>
         private static int SmartBackingLayer(VirtualLayerType type)
         {
             int[] preferred;
