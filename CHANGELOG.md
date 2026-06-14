@@ -25,6 +25,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - **CI workflow** (`.github/workflows/ci.yml`): installer smoke-tests on Linux
   and Windows runners on every push/PR, plus a docs-presence check.
 
+### Fixed
+- **CT / mod-tile overlay disappears after playtest** (Issue #16 Bug 3):
+  `ModTileOverlay` and `AnimatedModTileOverlay` no longer cache a successful
+  build when `Grid.TileToWorld` returned null for one or more placements (which
+  happens briefly after a playtest ends before the editor tile system is ready).
+  Affected overlays will retry on the next frame until all tiles resolve.
+- **CT / mod-tile overlay wrong lighting during playtest** (Issue #16 Bug 1):
+  `OverlayLib.LitSpriteMaterial` now re-borrows its material from a vanilla
+  `SpriteRenderer` on every level transition (`GameEvents.LevelLoaded`), so the
+  correct scene-specific lit sprite material is used in both the editor and
+  play-test scenes.
+- **CT / mod-tile overlay Y-position flip during playtest** (Issue #16 Bug 2):
+  `Grid.TileToWorld` and `Grid.WorldToTile` now detect whether the Rotorz tile
+  system runs top-to-bottom (row 0 = highest world Y) and invert the tile
+  Y-coordinate accordingly, so custom tiles appear at the correct position in
+  play mode.
+
 ---
 
 ## [2.4.0]

@@ -63,6 +63,18 @@ namespace E2EApi.Features
             }
         }
 
+        /// <summary>
+        /// Resets the cached lit sprite material so it is re-borrowed from the
+        /// new scene on the next access. Call this whenever a level is loaded or
+        /// unloaded so the material from the previous scene is not carried over
+        /// (which would break day/night lighting after a playtest transition).
+        /// </summary>
+        internal static void InvalidateMaterialCache()
+        {
+            _litSpriteMaterial = null;
+            _litSearchAttempted = false;
+        }
+
         /// <summary>8×8 yellow/transparent checker, point-filtered.</summary>
         public static Texture2D CheckerTexture
         {

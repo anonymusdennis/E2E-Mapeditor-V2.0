@@ -30,6 +30,11 @@ namespace E2EApi
             return _instance.StartCoroutine(routine);
         }
 
+        private void Awake()
+        {
+            Events.GameEvents.LevelLoaded += Features.OverlayLib.InvalidateMaterialCache;
+        }
+
         private void Update()
         {
             MainThread.Drain();

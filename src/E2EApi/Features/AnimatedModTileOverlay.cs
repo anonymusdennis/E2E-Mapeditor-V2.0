@@ -104,11 +104,18 @@ namespace E2EApi.Features
                 _builtFor != level || _builtLayer != editorLayer ||
                 _builtGeometryVersion != MapGeometry.Version)
             {
-                Rebuild(editorLayer);
-                _builtVersion = AnimatedModTiles.Version;
-                _builtGeometryVersion = MapGeometry.Version;
-                _builtFor = level;
-                _builtLayer = editorLayer;
+                bool allResolved = Rebuild(editorLayer);
+                // Only cache the build state when every placement resolved to a world
+                // position. If TileToWorld returned null for any tile (e.g. immediately
+                // after a playtest ends, before the editor tile system is ready), leave
+                // the cache stale so the next tick retries the rebuild.
+                if (allResolved)
+                {
+                    _builtVersion = AnimatedModTiles.Version;
+                    _builtGeometryVersion = MapGeometry.Version;
+                    _builtFor = level;
+                    _builtLayer = editorLayer;
+                }
             }
 
             // advance animation frames each frame
@@ -118,10 +125,11 @@ namespace E2EApi.Features
 
         // ---- private ----
 
-        private static void Rebuild(int editorLayer)
+        private static bool Rebuild(int editorLayer)
         {
             DestroyAll();
             float tileSize = FenceOverlay.TileWorldSize();
+            bool allResolved = true;
 
             foreach (var p in AnimatedModTiles.All())
             {
@@ -140,7 +148,7 @@ namespace E2EApi.Features
                 Sprite displaySprite = sprites[0] ?? MissingSprite(p.WTiles, p.HTiles);
 
                 Vector3? world = Grid.TileToWorld(p.X, p.Y, p.Layer);
-                if (world == null) continue;
+                if (world == null) { allResolved = false; continue; }
 
                 var go = new GameObject("E2E_AnimTile");
                 var renderer = go.AddComponent<SpriteRenderer>();
@@ -191,6 +199,7 @@ namespace E2EApi.Features
                 entry.InitTiming();
                 Entries.Add(entry);
             }
+            return allResolved;
         }
 
         private static readonly Dictionary<long, Sprite> MissingSprites =

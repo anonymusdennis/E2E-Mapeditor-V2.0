@@ -47,17 +47,25 @@ namespace E2EApi.Features
             {
                 return;
             }
-            Rebuild(editorLayer);
-            _builtVersion = ModTiles.Version;
-            _builtGeometryVersion = MapGeometry.Version;
-            _builtFor = level;
-            _builtLayer = editorLayer;
+            bool allResolved = Rebuild(editorLayer);
+            // Only cache the build state when every placement resolved to a world
+            // position. If TileToWorld returned null for any tile (e.g. immediately
+            // after a playtest ends, before the editor tile system is ready), leave
+            // the cache stale so the next tick retries the rebuild.
+            if (allResolved)
+            {
+                _builtVersion = ModTiles.Version;
+                _builtGeometryVersion = MapGeometry.Version;
+                _builtFor = level;
+                _builtLayer = editorLayer;
+            }
         }
 
-        private static void Rebuild(int editorLayer)
+        private static bool Rebuild(int editorLayer)
         {
             DestroyMarkers();
             float tileSize = FenceOverlay.TileWorldSize();
+            bool allResolved = true;
             foreach (var p in ModTiles.All())
             {
                 if (editorLayer >= 0 && p.Layer > editorLayer)
@@ -73,6 +81,7 @@ namespace E2EApi.Features
                 Vector3? world = Grid.TileToWorld(p.X, p.Y, p.Layer);
                 if (world == null)
                 {
+                    allResolved = false;
                     continue;
                 }
                 var go = new GameObject("E2E_ModTile");
@@ -118,6 +127,7 @@ namespace E2EApi.Features
                     Markers.Add(go);
                 }
             }
+            return allResolved;
         }
 
         private static readonly Dictionary<long, Sprite> MissingSprites =
