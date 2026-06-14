@@ -310,7 +310,16 @@ namespace E2EApi.Features
                 _byPhysicalIndex.TryGetValue(pi, out t);
                 List<int> virtuals;
                 _physicalToVirtual.TryGetValue(pi, out virtuals);
-                string vis = virtuals != null ? string.Join(",", virtuals) : "-";
+                string vis = "-";
+                if (virtuals != null && virtuals.Count > 0)
+                {
+                    var parts = new string[virtuals.Count];
+                    for (int j = 0; j < virtuals.Count; j++)
+                    {
+                        parts[j] = virtuals[j].ToString();
+                    }
+                    vis = string.Join(",", parts);
+                }
                 sb.AppendLine($"    floorIndex={pi} type={t} virtualIndices=[{vis}]");
             }
             sb.AppendLine($"  Virtual order ({_virtualToPhysical.Count} layers):");

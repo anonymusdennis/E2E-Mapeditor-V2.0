@@ -514,7 +514,7 @@ namespace MapEditorMod.WebUi
         <button onclick='mpRefresh()' title='Re-read the current room properties'>⟳ Refresh</button>
       </div>
       <div class='hint' style='margin-top:4px'>When you are the room host and the map requires
-        the mod, click "Announce" to set a Photon room property so other modded clients know.
+        the mod, click ""Announce"" to set a Photon room property so other modded clients know.
         Unmodded clients see the vanilla-fallback disclaimer map automatically.</div>
     </div>
     <div class='card' id='ca_card'>
@@ -964,6 +964,7 @@ namespace MapEditorMod.WebUi
       <button onclick='closeLayerStack()'>Close</button>
     </div>
     <div class='hint' style='margin-bottom:10px'>Stack of logical floors stored in Level.e2e. Drag to reorder. Right-click a floor in-game to hide/show it. Drag floors to 🗑 Deleted to remove them.</div>
+    <div class='layer-warn show'>Currently this feature is sadly broken, use at your own risk.</div>
     <div id='layer_warning' class='layer-warn'></div>
     <div class='layer-bounds'>
       <span class='lbl'>Bounds:</span>
@@ -1513,8 +1514,8 @@ async function armStamp() {
       const bundles = await (await fetch('/api/custom-assets/bundles')).json();
       const sel = el('ca_bundle');
       const prev = sel.value;
-      sel.innerHTML = '<option value=\"\">— pick a bundle —</option>' +
-        bundles.map(b => `<option value=\"${esc(b)}\"${b === prev ? ' selected' : ''}>${esc(b)}</option>`).join('');
+      sel.innerHTML = '<option value="""">— pick a bundle —</option>' +
+        bundles.map(b => `<option value=""${esc(b)}""${b === prev ? ' selected' : ''}>${esc(b)}</option>`).join('');
       if (prev && bundles.includes(prev)) {
         loadCaAssets();
       } else {
@@ -1531,8 +1532,8 @@ async function armStamp() {
     try {
       const assets = await (await fetch('/api/custom-assets/list?bundle=' + encodeURIComponent(bundle))).json();
       const sel = el('ca_asset');
-      sel.innerHTML = '<option value=\"\">— pick an asset —</option>' +
-        assets.map(a => `<option value=\"${esc(a)}\">${esc(a)}</option>`).join('');
+      sel.innerHTML = '<option value="""">— pick an asset —</option>' +
+        assets.map(a => `<option value=""${esc(a)}"">${esc(a)}</option>`).join('');
       el('ca_asset_list').style.display = '';
       el('ca_place_btn').disabled = assets.length === 0;
     } catch(e) {
@@ -1575,10 +1576,10 @@ async function armStamp() {
         div.innerHTML = '';
       } else {
         div.style.display = '';
-        div.innerHTML = '<table style=\"width:100%;border-collapse:collapse;font-size:11px\">' +
-          '<tr><th style=\"text-align:left;color:#7a7ab0\">Bundle</th>' +
-          '<th style=\"text-align:left;color:#7a7ab0\">Asset</th>' +
-          '<th style=\"text-align:left;color:#7a7ab0\">Tile</th></tr>' +
+        div.innerHTML = '<table style=""width:100%;border-collapse:collapse;font-size:11px"">' +
+          '<tr><th style=""text-align:left;color:#7a7ab0"">Bundle</th>' +
+          '<th style=""text-align:left;color:#7a7ab0"">Asset</th>' +
+          '<th style=""text-align:left;color:#7a7ab0"">Tile</th></tr>' +
           list.map(p =>
             `<tr><td>${esc(p.bundle)}</td><td>${esc(p.asset)}</td>` +
             `<td>(${p.x},${p.y},L${p.layer})</td></tr>`

@@ -33,6 +33,15 @@ namespace E2EApi
         private void Awake()
         {
             Events.GameEvents.LevelLoaded += Features.OverlayLib.ResetLitMaterial;
+            Events.GameEvents.PlaytestStarted += OnPlaytestTransition;
+            Events.GameEvents.PlaytestEnded += OnPlaytestTransition;
+        }
+
+        private static void OnPlaytestTransition()
+        {
+            Features.OverlayLib.ResetLitMaterial();
+            Features.ModTileOverlay.InvalidateCache();
+            Features.AnimatedModTileOverlay.InvalidateCache();
         }
 
         private void Update()

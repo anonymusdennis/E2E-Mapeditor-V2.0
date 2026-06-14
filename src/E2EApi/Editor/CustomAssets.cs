@@ -138,7 +138,7 @@ namespace E2EApi.Editor
         }
 
         /// <summary>Load a prefab/asset out of a bundle, or null.</summary>
-        public static T Load<T>(string bundlePath, string assetName) where T : Object
+        public static T Load<T>(string bundlePath, string assetName) where T : UnityEngine.Object
         {
             var bundle = LoadBundle(bundlePath);
             return bundle != null ? bundle.LoadAsset<T>(assetName) : null;
@@ -152,7 +152,7 @@ namespace E2EApi.Editor
             {
                 return null;
             }
-            var instance = Object.Instantiate(prefab, position, Quaternion.identity);
+            var instance = UnityEngine.Object.Instantiate(prefab, position, Quaternion.identity);
             return instance;
         }
 

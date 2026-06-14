@@ -444,7 +444,7 @@ namespace E2EApi.Features
         /// Returns a JSON summary suitable for the <c>/api/multiplayer</c>
         /// web-UI endpoint.
         /// </summary>
-        internal static string ToJson()
+        public static string ToJson()
         {
             bool mp = IsMultiplayer;
             bool host = mp && IsHost;

@@ -33,9 +33,16 @@ namespace E2EApi
             {
                 return;
             }
-            Harmony.CreateClassProcessor(patchClass).Patch();
-            Applied.Add(patchClass);
-            Log.Debug($"patched {patchClass.Name}");
+            try
+            {
+                Harmony.CreateClassProcessor(patchClass).Patch();
+                Applied.Add(patchClass);
+                Log.Debug($"patched {patchClass.Name}");
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"failed to patch {patchClass.Name}: {ex.Message}");
+            }
         }
 
         /// <summary>Patch classes the API has applied so far (read-only snapshot).</summary>

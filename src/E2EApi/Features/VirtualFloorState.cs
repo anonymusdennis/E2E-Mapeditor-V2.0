@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+using System.Collections.Generic;
 
 namespace E2EApi.Features
 {
@@ -19,13 +19,19 @@ namespace E2EApi.Features
         /// <summary>The physical floor that was active when VirtualIndex was last set.</summary>
         public FloorManager.Floor PhysicalFloor;
 
-        private static readonly ConditionalWeakTable<Character, VirtualFloorState> _table =
-            new ConditionalWeakTable<Character, VirtualFloorState>();
+        private static readonly Dictionary<Character, VirtualFloorState> _table =
+            new Dictionary<Character, VirtualFloorState>();
 
         /// <summary>Gets or creates the <see cref="VirtualFloorState"/> for <paramref name="character"/>.</summary>
         public static VirtualFloorState GetOrCreate(Character character)
         {
-            return _table.GetOrCreateValue(character);
+            VirtualFloorState state;
+            if (!_table.TryGetValue(character, out state))
+            {
+                state = new VirtualFloorState();
+                _table[character] = state;
+            }
+            return state;
         }
 
         /// <summary>
@@ -42,7 +48,7 @@ namespace E2EApi.Features
         /// </summary>
         public static void Set(Character character, int virtualIndex, FloorManager.Floor physicalFloor)
         {
-            var state = _table.GetOrCreateValue(character);
+            var state = GetOrCreate(character);
             state.VirtualIndex = virtualIndex;
             state.PhysicalFloor = physicalFloor;
         }

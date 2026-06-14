@@ -59,9 +59,9 @@ namespace E2EApi.Editor
                 }
             }
 
-            // set the native m_IgnoreChecks flag so the brush preview (LevelEditorBrushElement.UpdateLook)
-            // also skips cross-floor property checks — eliminates the red "blocked above" highlight
-            [HarmonyPatch(typeof(LevelEditorBrushElement), "UpdateLook")]
+            // set the native m_IgnoreChecks flag so the brush preview
+            // (LevelEditorBrushElement.ValidateElement) skips cross-floor checks
+            [HarmonyPatch(typeof(LevelEditorBrushElement), nameof(LevelEditorBrushElement.ValidateElement))]
             [HarmonyPrefix]
             private static void BypassBrushElementChecks()
             {

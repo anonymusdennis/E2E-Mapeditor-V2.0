@@ -7,40 +7,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+---
+
+## [2.1.1] — 2026-06-14
+
 ### Added
-- **Multiplayer gate** (`MultiplayerGate`): when a custom map is flagged
-  `requiresMod=true` and the host is in a Photon room, the host automatically
-  sets a room custom property (`e2e_mapeditor`) so other modded clients can
-  detect the requirement.  Public API: `MultiplayerGate.IsRequiredInCurrentRoom`,
-  `AnnounceRequiresMod()`, `RefreshRoomState()`, events `RoomRequiresMod` and
-  `RoomNoLongerRequiresMod`.
-- **Web API endpoints**: `GET /api/multiplayer`, `POST /api/multiplayer/announce`,
-  `POST /api/multiplayer/refresh`.
-- **Web UI multiplayer panel** in the Settings tab: shows room host/client role,
-  property state, and "Announce mod required" button.
-- **Workshop interop** (`WorkshopInterop`): Workshop uploads now also stage an
-  `e2e_workshop_meta.txt` companion file that records mod version and
-  `requires_mod` flag.  Download side fires `WorkshopMapLoaded` event so UIs
-  can show a compatibility note.
-- **CI workflow** (`.github/workflows/ci.yml`): installer smoke-tests on Linux
-  and Windows runners on every push/PR, plus a docs-presence check.
+- Map layers disclaimer in the in-game Configure Map Layers window and web UI
+  layer stack overlay.
+- **Multiplayer gate** (`MultiplayerGate`): Photon room property support when
+  custom maps require the mod; web API and Settings tab panel.
+- **Workshop interop** (`WorkshopInterop`): `e2e_workshop_meta.txt` companion
+  on upload; `WorkshopMapLoaded` event on download.
+- Phase 7.6: Virtual map layers (multi-floor geometry), web layer stack UI,
+  expanded bounds, trash bin, drag-and-drop reorder.
+- Phase 7.7: Per-map gameplay settings (`[mapSettings]`) with web UI panel.
+- Phase 7.5+: Custom tilesets, custom asset placements, animated tiles.
+- CI workflow for installer smoke-tests on Linux and Windows.
 
 ### Fixed
-- **CT / mod-tile overlay disappears after playtest** (Issue #16 Bug 3):
-  `ModTileOverlay` and `AnimatedModTileOverlay` no longer cache a successful
-  build when `Grid.TileToWorld` returned null for one or more placements (which
-  happens briefly after a playtest ends before the editor tile system is ready).
-  Affected overlays will retry on the next frame until all tiles resolve.
-- **CT / mod-tile overlay wrong lighting during playtest** (Issue #16 Bug 1):
-  `OverlayLib.LitSpriteMaterial` now re-borrows its material from a vanilla
-  `SpriteRenderer` on every level transition (`GameEvents.LevelLoaded`), so the
-  correct scene-specific lit sprite material is used in both the editor and
-  play-test scenes.
-- **CT / mod-tile overlay Y-position flip during playtest** (Issue #16 Bug 2):
-  `Grid.TileToWorld` and `Grid.WorldToTile` now detect whether the Rotorz tile
-  system runs top-to-bottom (row 0 = highest world Y) and invert the tile
-  Y-coordinate accordingly, so custom tiles appear at the correct position in
-  play mode.
+- **.NET 3.5 / BepInEx build compatibility**: net35-safe collections, string
+  joins, `UnityEngine.Object` disambiguation, Harmony patch error handling,
+  brush restriction patch target (`ValidateElement`), `EditorSession.Exit()`,
+  web UI verbatim string quoting, launch script line endings.
+- **CT / mod-tile playtest** (Issue #16): overlay rebuild after playtest,
+  lit sprite material on level load, Y-axis tile coordinate inversion.
+- **DuplicateLayer**: independent backing layers; `[!SHARED]` warning in layer list.
 
 ---
 

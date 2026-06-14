@@ -178,7 +178,7 @@ namespace E2EApi.Features
             if (Has("generatorDowntime"))
             {
                 float v = GetFloat("generatorDowntime", 30f);
-                foreach (var gen in Object.FindObjectsOfType<Generator>())
+                foreach (var gen in UnityEngine.Object.FindObjectsOfType<Generator>())
                     Traverse.Create(gen).Field("m_InactiveTime").SetValue(v);
             }
 
@@ -186,14 +186,14 @@ namespace E2EApi.Features
             if (Has("cctvSpeed"))
             {
                 float v = GetFloat("cctvSpeed", 1f);
-                foreach (var cam in Object.FindObjectsOfType<CCTVCamera>())
+                foreach (var cam in UnityEngine.Object.FindObjectsOfType<CCTVCamera>())
                     Traverse.Create(cam).Field("m_Speed").SetValue(v);
             }
 
             // Guard-tower sniper settings
             if (Has("sniperDamage") || Has("sniperHeatThreshold"))
             {
-                foreach (var tower in Object.FindObjectsOfType<GuardTowerManager>())
+                foreach (var tower in UnityEngine.Object.FindObjectsOfType<GuardTowerManager>())
                 {
                     if (Has("sniperDamage"))
                         Traverse.Create(tower).Field("m_DamagePerShot").SetValue(GetInt("sniperDamage", 40));
@@ -206,7 +206,7 @@ namespace E2EApi.Features
             // Starting alertness star rating
             if (Has("startingAlertness"))
             {
-                var am = Object.FindObjectOfType<PrisonAlertnessManager>();
+                var am = UnityEngine.Object.FindObjectOfType<PrisonAlertnessManager>();
                 if (am != null)
                     Traverse.Create(am).Field("m_StartingAlertness")
                             .SetValue(GetInt("startingAlertness", 0));
@@ -314,7 +314,7 @@ namespace E2EApi.Features
             {
                 if (_values.Count == 0) return;
 
-                var rm = Object.FindObjectOfType<RoutineManager>();
+                var rm = UnityEngine.Object.FindObjectOfType<RoutineManager>();
                 if (rm == null) return;
 
                 var rmT = Traverse.Create(rm);

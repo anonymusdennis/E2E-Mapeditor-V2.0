@@ -46,6 +46,11 @@ namespace MapEditorMod
             _window = ModWindow.Create("Configure Map Layers", 520f, 780f);
             var list = UiFactory.VerticalList(_window.Content, 24f, 4f);
 
+            var disclaimer = UiFactory.Label(list,
+                "Currently this feature is sadly broken, use at your own risk.", 11);
+            disclaimer.color = new Color(1f, 0.55f, 0.45f, 1f);
+            UiFactory.FixHeight(disclaimer, 32f);
+
             _summary = UiFactory.Label(list, "", 12);
             _summary.color = new Color(1f, 0.92f, 0.72f, 1f);
             UiFactory.FixHeight(_summary, 56f);
@@ -230,7 +235,7 @@ namespace MapEditorMod
                     return;
                 }
                 dialog.SetVisible(false);
-                GlobalStart.GetInstance().EndEditorLevel();
+                EditorSession.Exit();
             });
             UiFactory.Button(btnRow.transform, "Cancel", () => dialog.SetVisible(false));
             dialog.SetVisible(true);

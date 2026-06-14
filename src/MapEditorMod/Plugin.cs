@@ -238,11 +238,6 @@ namespace MapEditorMod
             _mapLayersWindow.Hide();
             _window.Hide();
             VanillaEditor.SetEditorUiVisible(false);
-            // Re-discover the vanilla sprite material for the playtest scene and
-            // rebuild the tile overlays at playtest-mode world positions.
-            E2EApi.Features.OverlayLib.ResetLitMaterial();
-            E2EApi.Features.ModTileOverlay.InvalidateCache();
-            E2EApi.Features.AnimatedModTileOverlay.InvalidateCache();
         }
 
         private void OnPlaytestEnded()
@@ -254,11 +249,6 @@ namespace MapEditorMod
                 VanillaEditor.SetBrushVisible(true);
                 VanillaEditor.SetEditorUiVisible(true);
             }
-            // Re-discover the vanilla sprite material for the editor scene and
-            // rebuild the tile overlays at editor-mode world positions.
-            E2EApi.Features.OverlayLib.ResetLitMaterial();
-            E2EApi.Features.ModTileOverlay.InvalidateCache();
-            E2EApi.Features.AnimatedModTileOverlay.InvalidateCache();
         }
 
         private void LateUpdate()
@@ -401,6 +391,6 @@ namespace MapEditorMod
     {
         public const string Guid = "org.anonymusdennis.e2e.mapeditor";
         public const string Name = "E2E Map Editor";
-        public const string Version = "2.4.0";
+        public const string Version = "2.1.1";
     }
 }

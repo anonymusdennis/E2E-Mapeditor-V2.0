@@ -80,6 +80,25 @@ namespace E2EApi.Editor
         }
 
         /// <summary>
+        /// Leave the level editor and return to the frontend. Used after
+        /// geometry changes that require a full reload. Main thread only.
+        /// </summary>
+        public static bool Exit()
+        {
+            if (!Events.GameEvents.IsInEditor)
+            {
+                return false;
+            }
+            var globalStart = GlobalStart.GetInstance();
+            if (globalStart == null)
+            {
+                return false;
+            }
+            globalStart.EndEditorLevel();
+            return true;
+        }
+
+        /// <summary>
         /// Dismiss the "press the spacebar to start" title screen without
         /// input hardware: replicates BootFlow's WAIT_FOR_START handler with
         /// the mouse-owning Rewired player. No-op outside that boot stage.

@@ -98,7 +98,7 @@ namespace E2EApi.Features
         public static int SelectedVirtualLayerId => GetLayer(SelectedVirtualLayerIndex).Id;
         public static string CompatibilityHash => ComputeHash(_current);
         public static int Version { get; private set; }
-        public static IReadOnlyList<VirtualLayer> TrashBin => _trashBin;
+        public static IList<VirtualLayer> TrashBin => _trashBin;
         public static int TrashCount => _trashBin.Count;
         public static bool IsNativeCompatible =>
             Width == NativeWidth && Height == NativeHeight && OriginX == 0 &&
