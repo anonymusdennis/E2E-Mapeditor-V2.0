@@ -640,6 +640,39 @@ namespace MapEditorMod.WebUi
                     }));
                     return 200;
                 }
+                // /api/map-settings — read/write per-map gameplay settings
+                if (path == "/api/map-settings")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() => MapSettings.ToJson()));
+                    return 200;
+                }
+                if (method == "POST" && path == "/api/map-settings/set")
+                {
+                    string msKey   = Get(query, "key");
+                    string msValue = Get(query, "value");
+                    if (string.IsNullOrEmpty(msKey))
+                    {
+                        body = Encoding.UTF8.GetBytes("{\"ok\":false,\"msg\":\"key required\"}");
+                        return 400;
+                    }
+                    MainThread.Run(() => MapSettings.Set(msKey, msValue));
+                    body = Encoding.UTF8.GetBytes("{\"ok\":true}");
+                    return 200;
+                }
+                if (method == "POST" && path == "/api/map-settings/unset")
+                {
+                    string msKey = Get(query, "key");
+                    MainThread.Run(() => MapSettings.Unset(msKey));
+                    body = Encoding.UTF8.GetBytes("{\"ok\":true}");
+                    return 200;
+                }
+                if (method == "POST" && path == "/api/map-settings/clear")
+                {
+                    MainThread.Run(() => MapSettings.Clear());
+                    body = Encoding.UTF8.GetBytes("{\"ok\":true}");
+                    return 200;
+                }
+
                 // /api/custom-assets/bundles — list bundle filenames in the bundles folder
                 if (path == "/api/custom-assets/bundles")
                 {

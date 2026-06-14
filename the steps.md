@@ -273,6 +273,33 @@ layer, and show the correct Z-depth in-game.
 
 ---
 
+## Phase 7.7 — Per-map gameplay settings (`[mapSettings]`)
+
+**Goal:** map authors can tune gameplay rules (time, audio, player stats, security
+hardware) per map via the web UI; settings survive in the Level.e2e sidecar and
+are applied automatically at play time.
+
+- [x] `MapSettings` feature class in `E2EApi/Features/` — sidecar-backed key=value
+      store (`[mapSettings]` section), `Get`/`Set`/`Unset`/`Clear` API, `ToJson()`
+- [x] Harmony patches (nested in `MapSettings`):
+  - `RoutineManager.GetCurrentGameSecondsPerRealSecond` postfix → `timeScale`
+  - `LevelSetup_RoutineManager.Setup` postfix → `startHour`/`startMinute`,
+    `timedPrison`, `ambience`, `spotlightHours`
+- [x] Scene sweep via `GameEvents.LevelLoaded` → `generatorDowntime`, `cctvSpeed`,
+      `sniperDamage`/`sniperHeatThreshold`, `startingAlertness`
+- [x] PrisonConfig mutation (snapshot + restore on unload) →
+      `playerMoney`, `healthRegen`, `energyRegen`, `heatDecay`
+- [x] Web API: `GET /api/map-settings`, `POST /api/map-settings/set`,
+      `/unset`, `/clear`
+- [x] Web UI: replaced "Per-map settings (coming)" placeholder with a full
+      grouped settings panel (Time, Audio, Player stats, Security hardware)
+      in the Settings tab; auto-refreshes on tab open
+
+**Done when:** a map with custom `timeScale=2.0 startHour=22 timedPrison=48h` saves,
+loads, and plays at double speed starting at 22:00 with a 48-hour escape deadline.
+
+---
+
 ## Phase 8 — Packaging and Windows validation
 
 **Goal:** anyone can install and use the mod; modders can use the API.

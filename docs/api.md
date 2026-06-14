@@ -392,6 +392,10 @@ generally return `{"ok":bool}` or `{"ok":bool,"msg":"…"}`.
 | POST | `/api/custom-assets/erase` | `x`, `y`, `layer` | erase custom asset at a tile |
 | POST | `/api/custom-assets/erase-cursor` | — | erase at the current editor cursor tile |
 | POST | `/api/custom-assets/clear` | — | clear all custom asset placements |
+| GET | `/api/map-settings` | — | return all per-map settings as `{settings:{key:value,…}}` |
+| POST | `/api/map-settings/set` | `key`, `value` | set a per-map setting (persisted to Level.e2e) |
+| POST | `/api/map-settings/unset` | `key` | remove a per-map setting |
+| POST | `/api/map-settings/clear` | — | remove all per-map settings |
 | POST | `/api/cheat` | `name=heal\|energy\|money\|stealth\|ko-guards\|ko-dogs` | run a play-mode cheat |
 | POST | `/api/dev/skip-title` | — | dismiss the "press spacebar" title screen |
 | POST | `/api/dev/enter-editor` | `file` (optional) | enter the level editor (empty `file` = new map) |

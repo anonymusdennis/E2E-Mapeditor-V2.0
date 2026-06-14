@@ -344,6 +344,17 @@ namespace MapEditorMod.WebUi
   .layer-footer { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px;
                   padding-top:12px; border-top:1px solid #2e2e3c; }
   .layer-hash { font-size:11px; color:#8d8da8; font-family:monospace; }
+  /* per-map settings panel */
+  .ms-group { margin-bottom:12px; }
+  .ms-group-label { font-size:11px; color:#9090b0; text-transform:uppercase; letter-spacing:.05em;
+                    margin-bottom:6px; border-bottom:1px solid #2a2a38; padding-bottom:3px; }
+  .ms-row { display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin-bottom:5px; }
+  .ms-key { font-size:11px; color:#ccd; font-family:monospace; min-width:0; }
+  .ms-inp { width:90px; font-size:12px; background:#141420; border:1px solid #3a3a50;
+            color:#eee; padding:3px 6px; border-radius:4px; }
+  .ms-inp.ms-active { border-color:#7a7af0; background:#1a1a30; }
+  .ms-x { font-size:11px; background:none; border:1px solid #503030; color:#c07070; padding:2px 6px; }
+  .ms-x:hover { border-color:#a05050; color:#f09090; }
 </style>
 </head>
 <body>
@@ -568,11 +579,138 @@ namespace MapEditorMod.WebUi
         <span class='hint'>Paper-stack editor: add/reorder virtual floors, set types, expand map bounds beyond 120×120.</span>
       </div>
     </div>
-    <div class='card'>
-      <h2>Per-map settings (coming)</h2>
-      <div class='hint'>Custom per-map rules — time speed, ambient sound/music, routine
-        times, guard counts, lighting and more — are being catalogued in
-        <b>possible_settings.md</b> and will be stored in the map's Level.e2e sidecar.</div>
+    <div class='card' id='ms_card'>
+      <h2>Per-map settings
+        <span id='ms_badge' style='display:none;font-size:11px;color:#7af07a;margin-left:8px;font-weight:normal'></span>
+      </h2>
+      <div class='hint' style='margin-bottom:10px'>
+        Settings saved here are stored in the map's Level.e2e sidecar and applied whenever
+        the map is played (including play-test). Leave a field blank to use game defaults.
+      </div>
+
+      <!-- Time -->
+      <div class='ms-group'>
+        <div class='ms-group-label'>⏱ Time</div>
+        <div class='ms-row'>
+          <span class='ms-key'>timeScale</span>
+          <input class='ms-inp' id='ms_timeScale' type='number' step='0.1' min='0.1' placeholder='1.0'
+            title='Day-cycle speed multiplier. 2.0 = twice as fast.'>
+          <button onclick='msSet(""timeScale"",el(""ms_timeScale"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""timeScale"",""ms_timeScale"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>startHour</span>
+          <input class='ms-inp' id='ms_startHour' type='number' min='0' max='23' placeholder='8'
+            title='In-game hour when the map starts (0–23).'>
+          <button onclick='msSet(""startHour"",el(""ms_startHour"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""startHour"",""ms_startHour"")'>✕</button>
+          <span class='ms-key' style='margin-left:8px'>startMinute</span>
+          <input class='ms-inp' id='ms_startMinute' type='number' min='0' max='59' placeholder='0'
+            title='In-game minute when the map starts (0–59).'>
+          <button onclick='msSet(""startMinute"",el(""ms_startMinute"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""startMinute"",""ms_startMinute"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>timedPrison</span>
+          <input class='ms-inp' id='ms_timedPrison' type='text' placeholder='48h'
+            title='Escape deadline. Formats: 48h, 2h30m, 90m.'>
+          <button onclick='msSet(""timedPrison"",el(""ms_timedPrison"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""timedPrison"",""ms_timedPrison"")'>✕</button>
+        </div>
+      </div>
+
+      <!-- Audio -->
+      <div class='ms-group'>
+        <div class='ms-group-label'>🔊 Audio</div>
+        <div class='ms-row'>
+          <span class='ms-key'>ambience</span>
+          <input class='ms-inp' id='ms_ambience' type='text' placeholder='Play_Prison_05_Ambience_General'
+            title='Wwise ambience event name (see AUTOGEN_T17Wwise_Enums.Events for the full list).'>
+          <button onclick='msSet(""ambience"",el(""ms_ambience"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""ambience"",""ms_ambience"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>spotlightHours</span>
+          <input class='ms-inp' id='ms_spotlightHours' type='text' placeholder='18:30-06:30'
+            title='Spotlight on/off window (HH:MM-HH:MM).'>
+          <button onclick='msSet(""spotlightHours"",el(""ms_spotlightHours"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""spotlightHours"",""ms_spotlightHours"")'>✕</button>
+        </div>
+      </div>
+
+      <!-- Player stats -->
+      <div class='ms-group'>
+        <div class='ms-group-label'>🧍 Player stats</div>
+        <div class='ms-row'>
+          <span class='ms-key'>playerMoney</span>
+          <input class='ms-inp' id='ms_playerMoney' type='number' min='0' placeholder='100'
+            title='Starting money (in-game currency).'>
+          <button onclick='msSet(""playerMoney"",el(""ms_playerMoney"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""playerMoney"",""ms_playerMoney"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>healthRegen</span>
+          <input class='ms-inp' id='ms_healthRegen' type='number' step='0.001' placeholder='default'
+            title='Health restore rate per second (0 = no regen, hardcore).'>
+          <button onclick='msSet(""healthRegen"",el(""ms_healthRegen"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""healthRegen"",""ms_healthRegen"")'>✕</button>
+          <span class='ms-key' style='margin-left:8px'>energyRegen</span>
+          <input class='ms-inp' id='ms_energyRegen' type='number' step='0.001' placeholder='default'
+            title='Energy restore rate per second.'>
+          <button onclick='msSet(""energyRegen"",el(""ms_energyRegen"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""energyRegen"",""ms_energyRegen"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>heatDecay</span>
+          <input class='ms-inp' id='ms_heatDecay' type='number' step='0.001' placeholder='default'
+            title='Heat decay rate (0 = guards never forget).'>
+          <button onclick='msSet(""heatDecay"",el(""ms_heatDecay"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""heatDecay"",""ms_heatDecay"")'>✕</button>
+        </div>
+      </div>
+
+      <!-- Security hardware -->
+      <div class='ms-group'>
+        <div class='ms-group-label'>🔒 Security hardware</div>
+        <div class='ms-row'>
+          <span class='ms-key'>generatorDowntime</span>
+          <input class='ms-inp' id='ms_generatorDowntime' type='number' min='0' placeholder='30'
+            title='Seconds a generator stays off after being cut (default 30).'>
+          <button onclick='msSet(""generatorDowntime"",el(""ms_generatorDowntime"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""generatorDowntime"",""ms_generatorDowntime"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>cctvSpeed</span>
+          <input class='ms-inp' id='ms_cctvSpeed' type='number' step='0.1' min='0' placeholder='1.0'
+            title='CCTV camera sweep speed multiplier.'>
+          <button onclick='msSet(""cctvSpeed"",el(""ms_cctvSpeed"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""cctvSpeed"",""ms_cctvSpeed"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>sniperDamage</span>
+          <input class='ms-inp' id='ms_sniperDamage' type='number' min='0' placeholder='40'
+            title='Guard-tower sniper damage per shot (default 40).'>
+          <button onclick='msSet(""sniperDamage"",el(""ms_sniperDamage"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""sniperDamage"",""ms_sniperDamage"")'>✕</button>
+          <span class='ms-key' style='margin-left:8px'>sniperHeatThreshold</span>
+          <input class='ms-inp' id='ms_sniperHeatThreshold' type='number' min='0' max='100' placeholder='70'
+            title='Heat at which snipers open fire (0–100, default 70).'>
+          <button onclick='msSet(""sniperHeatThreshold"",el(""ms_sniperHeatThreshold"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""sniperHeatThreshold"",""ms_sniperHeatThreshold"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>startingAlertness</span>
+          <input class='ms-inp' id='ms_startingAlertness' type='number' min='0' max='10' placeholder='0'
+            title='Initial alertness star rating at map start (0–10).'>
+          <button onclick='msSet(""startingAlertness"",el(""ms_startingAlertness"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""startingAlertness"",""ms_startingAlertness"")'>✕</button>
+        </div>
+      </div>
+
+      <div class='row' style='margin-top:12px'>
+        <button onclick='msLoad()'>↻ Reload from map</button>
+        <button class='danger' onclick='msClearAll()'>✕ Clear all settings</button>
+      </div>
     </div>
   </div>
 
@@ -896,6 +1034,7 @@ function showTab(btn) {
   if (page === 'gameplay') refreshGameplay();
   if (page === 'tilesets') refreshTilesets();
   if (page === 'tools') { refreshCaBundles(); refreshCaPlaced(); }
+  if (page === 'settings') msLoad();
 }
 function padMain() {
   document.querySelector('main').style.paddingTop = (el('top').offsetHeight + 10) + 'px';
@@ -1152,6 +1291,64 @@ function setSetting(name, value, reloadList) {
 function setNum(name, value) {
   fetch(`/api/numsetting?name=${name}&value=${value}`, {method:'POST'});
 }
+
+/* ---- per-map settings ---- */
+const MS_KEYS = [
+  'timeScale','startHour','startMinute','timedPrison',
+  'ambience','spotlightHours',
+  'playerMoney','healthRegen','energyRegen','heatDecay',
+  'generatorDowntime','cctvSpeed','sniperDamage','sniperHeatThreshold','startingAlertness'
+];
+
+async function msLoad() {
+  try {
+    const d = await fetch('/api/map-settings').then(r => r.json());
+    const s = d.settings || {};
+    for (const k of MS_KEYS) {
+      const inp = el('ms_' + k);
+      if (!inp) continue;
+      if (s[k] !== undefined) {
+        inp.value = s[k];
+        inp.classList.add('ms-active');
+      } else {
+        inp.value = '';
+        inp.classList.remove('ms-active');
+      }
+    }
+    const n = Object.keys(s).length;
+    const badge = el('ms_badge');
+    if (badge) {
+      badge.style.display = n > 0 ? '' : 'none';
+      badge.textContent = n + (n === 1 ? ' setting' : ' settings') + ' active';
+    }
+  } catch(e) { console.warn('msLoad', e); }
+}
+
+async function msSet(key, value) {
+  value = (value || '').trim();
+  if (!value) { await msUnset(key, 'ms_' + key); return; }
+  await fetch(`/api/map-settings/set?key=${encodeURIComponent(key)}&value=${encodeURIComponent(value)}`, {method:'POST'});
+  const inp = el('ms_' + key);
+  if (inp) inp.classList.add('ms-active');
+  await msLoad();
+}
+
+async function msUnset(key, inputId) {
+  await fetch(`/api/map-settings/unset?key=${encodeURIComponent(key)}`, {method:'POST'});
+  if (inputId) {
+    const inp = el(inputId);
+    if (inp) { inp.value = ''; inp.classList.remove('ms-active'); }
+  }
+  await msLoad();
+}
+
+async function msClearAll() {
+  if (!confirm('Clear all per-map settings for this map?')) return;
+  await fetch('/api/map-settings/clear', {method:'POST'});
+  await msLoad();
+}
+
+
 
 async function cheat(name) {
   await post('/api/cheat?name=' + name);
