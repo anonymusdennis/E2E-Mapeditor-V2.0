@@ -274,7 +274,7 @@ namespace MapEditorMod.WebUi
                    display:none; align-items:center; justify-content:center; padding:20px; }
   #layer_overlay.show { display:flex; }
   #layer_box { background:#1a1a22; border:1px solid #3a3a4c; border-radius:14px;
-               width:min(720px,96vw); max-height:92vh; overflow:auto; padding:18px 20px;
+               width:min(900px,96vw); max-height:92vh; overflow:auto; padding:18px 20px;
                box-shadow:0 16px 48px rgba(0,0,0,.55); }
   #layer_box h3 { margin:0; font-size:18px; color:#fff; }
   .layer-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
@@ -286,13 +286,15 @@ namespace MapEditorMod.WebUi
   .layer-bounds button { font-size:11px; padding:4px 8px; }
   .layer-add-row { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
   .layer-add-row button { font-size:11px; background:#2a3040; border-color:#4a5070; }
-  .layer-stack { position:relative; padding:12px 8px 28px; min-height:120px; }
+  .layer-panels { display:flex; gap:0; align-items:flex-start; }
+  .layer-stack { position:relative; flex:1; padding:12px 8px 28px; min-height:120px; }
   .layer-sheet {
     position:relative; margin:0 auto 0; width:100%; max-width:640px;
     background: linear-gradient(145deg, #faf6ec 0%, #ebe4d4 55%, #ddd4c4 100%);
     color:#2a2820; border:1px solid #c8c0b0; border-radius:3px 3px 1px 1px;
     box-shadow: 1px 2px 0 #fff inset, 2px 3px 8px rgba(0,0,0,.28);
     padding:10px 14px 12px; transition: transform .18s ease, box-shadow .18s ease, margin .18s ease;
+    cursor:grab;
   }
   .layer-sheet + .layer-sheet { margin-top:-18px; }
   .layer-sheet.selected {
@@ -301,6 +303,10 @@ namespace MapEditorMod.WebUi
     outline: 2px solid #7a7af0;
     z-index: 50 !important;
   }
+  .layer-sheet.hidden-layer { opacity:0.45; filter:grayscale(60%); }
+  .layer-sheet.dragging { opacity:0.35; cursor:grabbing; }
+  .layer-sheet.drag-over-top { border-top:3px solid #7a7af0; margin-top:-21px; }
+  .layer-sheet.drag-over-bottom { border-bottom:3px solid #7a7af0; }
   .layer-sheet.type-underground { background: linear-gradient(145deg,#e8dcc8,#c8b898); }
   .layer-sheet.type-ground { background: linear-gradient(145deg,#eef4e8,#d4e0c8); }
   .layer-sheet.type-vent { background: linear-gradient(145deg,#e8eef4,#c8d4e0); }
@@ -318,9 +324,37 @@ namespace MapEditorMod.WebUi
   .layer-actions button.danger { border-color:#a05050; color:#802020; }
   .layer-actions select { font-size:11px; padding:3px 6px; background:#f8f4ec; border:1px solid #bbb;
                           border-radius:4px; color:#333; }
+  #trash_panel { width:210px; min-width:180px; flex-shrink:0; background:#16161f;
+                 border-left:1px solid #2e2e40; border-radius:0 8px 8px 0; padding:12px 10px;
+                 min-height:200px; }
+  #trash_panel h4 { margin:0 0 10px; font-size:13px; color:#aaa; text-align:center; }
+  #trash_drop_area { min-height:80px; background:#1e1e2a; border:2px dashed #3a3a50;
+                     border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:6px; }
+  #trash_drop_area.drag-active { border-color:#7a7af0; background:#22223a; }
+  #trash_drop_hint { font-size:11px; color:#555; text-align:center; padding:14px 6px; }
+  .trash-tile { background:#23232f; border:1px solid #3a3a4c; border-radius:6px;
+                padding:7px 9px; cursor:grab; transition:background .15s; }
+  .trash-tile:hover { background:#2c2c3c; }
+  .trash-tile strong { font-size:12px; color:#ccc; display:block; }
+  .trash-tile span { font-size:10px; color:#777; }
+  .trash-tile .restore-btn { font-size:10px; padding:2px 6px; margin-top:5px; display:block;
+                              background:#2a3040; border:1px solid #4a5070; color:#9ab; cursor:pointer;
+                              border-radius:4px; width:100%; text-align:center; }
+  .trash-tile .restore-btn:hover { background:#384060; }
   .layer-footer { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px;
                   padding-top:12px; border-top:1px solid #2e2e3c; }
   .layer-hash { font-size:11px; color:#8d8da8; font-family:monospace; }
+  /* per-map settings panel */
+  .ms-group { margin-bottom:12px; }
+  .ms-group-label { font-size:11px; color:#9090b0; text-transform:uppercase; letter-spacing:.05em;
+                    margin-bottom:6px; border-bottom:1px solid #2a2a38; padding-bottom:3px; }
+  .ms-row { display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin-bottom:5px; }
+  .ms-key { font-size:11px; color:#ccd; font-family:monospace; min-width:0; }
+  .ms-inp { width:90px; font-size:12px; background:#141420; border:1px solid #3a3a50;
+            color:#eee; padding:3px 6px; border-radius:4px; }
+  .ms-inp.ms-active { border-color:#7a7af0; background:#1a1a30; }
+  .ms-x { font-size:11px; background:none; border:1px solid #503030; color:#c07070; padding:2px 6px; }
+  .ms-x:hover { border-color:#a05050; color:#f09090; }
 </style>
 </head>
 <body>
@@ -470,6 +504,42 @@ namespace MapEditorMod.WebUi
         the real map travels in the sidecar and is restored automatically on modded clients.
         When off, vanilla players see the map without the modded extras.</div>
     </div>
+    <div class='card' id='mp_card'>
+      <h2>Multiplayer status</h2>
+      <div id='mp_status' class='hint'>Not in a multiplayer room.</div>
+      <div class='row' style='margin-top:8px;gap:6px;display:none' id='mp_actions'>
+        <button onclick='mpAnnounce()' title='Tell other players in the room that this map requires the mod'>
+          📡 Announce mod required
+        </button>
+        <button onclick='mpRefresh()' title='Re-read the current room properties'>⟳ Refresh</button>
+      </div>
+      <div class='hint' style='margin-top:4px'>When you are the room host and the map requires
+        the mod, click "Announce" to set a Photon room property so other modded clients know.
+        Unmodded clients see the vanilla-fallback disclaimer map automatically.</div>
+    </div>
+    <div class='card' id='ca_card'>
+      <h2>Custom assets <span id='ca_count' style='font-weight:normal;font-size:12px;color:#7a7ab0'></span></h2>
+      <div class='hint'>Drop Unity 5.5-compatible asset bundles into
+        <code>BepInEx/plugins/E2EMapEditor/bundles/</code> then pick a bundle below.
+        Place prefabs at the editor cursor tile. Placements are saved in the Level.e2e sidecar.</div>
+      <div class='row' style='margin-top:8px;align-items:center;gap:8px;flex-wrap:wrap'>
+        <select id='ca_bundle' onchange='loadCaAssets()' style='background:#0e0e12;border:1px solid #333;color:#eee;padding:4px 6px;border-radius:4px;min-width:160px'>
+          <option value=''>— pick a bundle —</option>
+        </select>
+        <button onclick='refreshCaBundles()' title='Refresh bundle list'>⟳</button>
+      </div>
+      <div id='ca_asset_list' style='display:none;margin-top:8px'>
+        <select id='ca_asset' style='background:#0e0e12;border:1px solid #333;color:#eee;padding:4px 6px;border-radius:4px;min-width:200px'>
+          <option value=''>— pick an asset —</option>
+        </select>
+        <div class='row' style='margin-top:6px;gap:6px'>
+          <button id='ca_place_btn' onclick='caPlaceCursor()' disabled title='Place selected prefab at the in-game cursor tile'>📦 Place at cursor</button>
+          <button id='ca_erase_btn' onclick='caEraseCursor()'>✕ Erase at cursor</button>
+          <button class='danger' onclick='caClearAll()'>Clear ALL custom assets</button>
+        </div>
+      </div>
+      <div id='ca_placed' style='margin-top:8px;max-height:140px;overflow-y:auto;display:none'></div>
+    </div>
   </div>
 
   <div class='page' id='page_settings'>
@@ -522,11 +592,138 @@ namespace MapEditorMod.WebUi
         <span class='hint'>Paper-stack editor: add/reorder virtual floors, set types, expand map bounds beyond 120×120.</span>
       </div>
     </div>
-    <div class='card'>
-      <h2>Per-map settings (coming)</h2>
-      <div class='hint'>Custom per-map rules — time speed, ambient sound/music, routine
-        times, guard counts, lighting and more — are being catalogued in
-        <b>possible_settings.md</b> and will be stored in the map's Level.e2e sidecar.</div>
+    <div class='card' id='ms_card'>
+      <h2>Per-map settings
+        <span id='ms_badge' style='display:none;font-size:11px;color:#7af07a;margin-left:8px;font-weight:normal'></span>
+      </h2>
+      <div class='hint' style='margin-bottom:10px'>
+        Settings saved here are stored in the map's Level.e2e sidecar and applied whenever
+        the map is played (including play-test). Leave a field blank to use game defaults.
+      </div>
+
+      <!-- Time -->
+      <div class='ms-group'>
+        <div class='ms-group-label'>⏱ Time</div>
+        <div class='ms-row'>
+          <span class='ms-key'>timeScale</span>
+          <input class='ms-inp' id='ms_timeScale' type='number' step='0.1' min='0.1' placeholder='1.0'
+            title='Day-cycle speed multiplier. 2.0 = twice as fast.'>
+          <button onclick='msSet(""timeScale"",el(""ms_timeScale"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""timeScale"",""ms_timeScale"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>startHour</span>
+          <input class='ms-inp' id='ms_startHour' type='number' min='0' max='23' placeholder='8'
+            title='In-game hour when the map starts (0–23).'>
+          <button onclick='msSet(""startHour"",el(""ms_startHour"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""startHour"",""ms_startHour"")'>✕</button>
+          <span class='ms-key' style='margin-left:8px'>startMinute</span>
+          <input class='ms-inp' id='ms_startMinute' type='number' min='0' max='59' placeholder='0'
+            title='In-game minute when the map starts (0–59).'>
+          <button onclick='msSet(""startMinute"",el(""ms_startMinute"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""startMinute"",""ms_startMinute"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>timedPrison</span>
+          <input class='ms-inp' id='ms_timedPrison' type='text' placeholder='48h'
+            title='Escape deadline. Formats: 48h, 2h30m, 90m.'>
+          <button onclick='msSet(""timedPrison"",el(""ms_timedPrison"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""timedPrison"",""ms_timedPrison"")'>✕</button>
+        </div>
+      </div>
+
+      <!-- Audio -->
+      <div class='ms-group'>
+        <div class='ms-group-label'>🔊 Audio</div>
+        <div class='ms-row'>
+          <span class='ms-key'>ambience</span>
+          <input class='ms-inp' id='ms_ambience' type='text' placeholder='Play_Prison_05_Ambience_General'
+            title='Wwise ambience event name (see AUTOGEN_T17Wwise_Enums.Events for the full list).'>
+          <button onclick='msSet(""ambience"",el(""ms_ambience"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""ambience"",""ms_ambience"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>spotlightHours</span>
+          <input class='ms-inp' id='ms_spotlightHours' type='text' placeholder='18:30-06:30'
+            title='Spotlight on/off window (HH:MM-HH:MM).'>
+          <button onclick='msSet(""spotlightHours"",el(""ms_spotlightHours"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""spotlightHours"",""ms_spotlightHours"")'>✕</button>
+        </div>
+      </div>
+
+      <!-- Player stats -->
+      <div class='ms-group'>
+        <div class='ms-group-label'>🧍 Player stats</div>
+        <div class='ms-row'>
+          <span class='ms-key'>playerMoney</span>
+          <input class='ms-inp' id='ms_playerMoney' type='number' min='0' placeholder='100'
+            title='Starting money (in-game currency).'>
+          <button onclick='msSet(""playerMoney"",el(""ms_playerMoney"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""playerMoney"",""ms_playerMoney"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>healthRegen</span>
+          <input class='ms-inp' id='ms_healthRegen' type='number' step='0.001' placeholder='default'
+            title='Health restore rate per second (0 = no regen, hardcore).'>
+          <button onclick='msSet(""healthRegen"",el(""ms_healthRegen"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""healthRegen"",""ms_healthRegen"")'>✕</button>
+          <span class='ms-key' style='margin-left:8px'>energyRegen</span>
+          <input class='ms-inp' id='ms_energyRegen' type='number' step='0.001' placeholder='default'
+            title='Energy restore rate per second.'>
+          <button onclick='msSet(""energyRegen"",el(""ms_energyRegen"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""energyRegen"",""ms_energyRegen"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>heatDecay</span>
+          <input class='ms-inp' id='ms_heatDecay' type='number' step='0.001' placeholder='default'
+            title='Heat decay rate (0 = guards never forget).'>
+          <button onclick='msSet(""heatDecay"",el(""ms_heatDecay"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""heatDecay"",""ms_heatDecay"")'>✕</button>
+        </div>
+      </div>
+
+      <!-- Security hardware -->
+      <div class='ms-group'>
+        <div class='ms-group-label'>🔒 Security hardware</div>
+        <div class='ms-row'>
+          <span class='ms-key'>generatorDowntime</span>
+          <input class='ms-inp' id='ms_generatorDowntime' type='number' min='0' placeholder='30'
+            title='Seconds a generator stays off after being cut (default 30).'>
+          <button onclick='msSet(""generatorDowntime"",el(""ms_generatorDowntime"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""generatorDowntime"",""ms_generatorDowntime"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>cctvSpeed</span>
+          <input class='ms-inp' id='ms_cctvSpeed' type='number' step='0.1' min='0' placeholder='1.0'
+            title='CCTV camera sweep speed multiplier.'>
+          <button onclick='msSet(""cctvSpeed"",el(""ms_cctvSpeed"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""cctvSpeed"",""ms_cctvSpeed"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>sniperDamage</span>
+          <input class='ms-inp' id='ms_sniperDamage' type='number' min='0' placeholder='40'
+            title='Guard-tower sniper damage per shot (default 40).'>
+          <button onclick='msSet(""sniperDamage"",el(""ms_sniperDamage"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""sniperDamage"",""ms_sniperDamage"")'>✕</button>
+          <span class='ms-key' style='margin-left:8px'>sniperHeatThreshold</span>
+          <input class='ms-inp' id='ms_sniperHeatThreshold' type='number' min='0' max='100' placeholder='70'
+            title='Heat at which snipers open fire (0–100, default 70).'>
+          <button onclick='msSet(""sniperHeatThreshold"",el(""ms_sniperHeatThreshold"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""sniperHeatThreshold"",""ms_sniperHeatThreshold"")'>✕</button>
+        </div>
+        <div class='ms-row'>
+          <span class='ms-key'>startingAlertness</span>
+          <input class='ms-inp' id='ms_startingAlertness' type='number' min='0' max='10' placeholder='0'
+            title='Initial alertness star rating at map start (0–10).'>
+          <button onclick='msSet(""startingAlertness"",el(""ms_startingAlertness"").value)'>Set</button>
+          <button class='ms-x' onclick='msUnset(""startingAlertness"",""ms_startingAlertness"")'>✕</button>
+        </div>
+      </div>
+
+      <div class='row' style='margin-top:12px'>
+        <button onclick='msLoad()'>↻ Reload from map</button>
+        <button class='danger' onclick='msClearAll()'>✕ Clear all settings</button>
+      </div>
     </div>
   </div>
 
@@ -552,6 +749,7 @@ namespace MapEditorMod.WebUi
     <div class='card'>
       <h2>Teleport — click the map</h2>
       <div class='row' id='floorBtns'><span class='hint'>floors appear in play mode</span></div>
+      <div class='row' id='virtualLayerBtns'></div>
       <div id='mapwrap'>
         <img id='mapimg' alt='floor map (play mode only)'
              onclick='mapClick(event)' onerror='mapError()'>
@@ -765,7 +963,7 @@ namespace MapEditorMod.WebUi
       <h3>🗂 Virtual Map Layers</h3>
       <button onclick='closeLayerStack()'>Close</button>
     </div>
-    <div class='hint' style='margin-bottom:10px'>Stack of logical floors stored in Level.e2e. Vanilla Level.dat stays 120×120 — mod tiles use virtual layers.</div>
+    <div class='hint' style='margin-bottom:10px'>Stack of logical floors stored in Level.e2e. Drag to reorder. Right-click a floor in-game to hide/show it. Drag floors to 🗑 Deleted to remove them.</div>
     <div id='layer_warning' class='layer-warn'></div>
     <div class='layer-bounds'>
       <span class='lbl'>Bounds:</span>
@@ -786,7 +984,18 @@ namespace MapEditorMod.WebUi
       <button onclick='geoAdd(""Vent"")'>+ Vent</button>
       <button onclick='geoAdd(""Roof"")'>+ Roof</button>
     </div>
-    <div id='layer_stack' class='layer-stack'></div>
+    <div class='layer-panels'>
+      <div id='layer_stack' class='layer-stack'
+           ondragover='event.preventDefault()' ondrop='onDropTrashRestore(event)'></div>
+      <div id='trash_panel'>
+        <h4>🗑 Deleted Floors</h4>
+        <div id='trash_drop_area'
+             ondragover='onTrashDragOver(event)' ondragleave='onTrashDragLeave(event)'
+             ondrop='onDropToTrash(event)'>
+          <div id='trash_drop_hint'>Drag floors here to delete</div>
+        </div>
+      </div>
+    </div>
     <div class='layer-footer'>
       <button class='danger' onclick='geoReset()'>Reset vanilla 6-layer layout</button>
       <span id='layer_hash' class='layer-hash'></span>
@@ -819,6 +1028,7 @@ let prefs = { customFilters: [], order: [], customBlocks: [], customCategoryName
 let orderRank = {};                        // block id -> user rank
 let dragId = null;
 let curFloor = -1;
+let curVirtualLayer = -1;
 let floorsKnown = '';
 let mapTileSize = 8; // px per tile in the map texture (game generates 8)
 let lastState = null;
@@ -836,6 +1046,8 @@ function showTab(btn) {
   padMain();
   if (page === 'gameplay') refreshGameplay();
   if (page === 'tilesets') refreshTilesets();
+  if (page === 'tools') { refreshCaBundles(); refreshCaPlaced(); }
+  if (page === 'settings') msLoad();
 }
 function padMain() {
   document.querySelector('main').style.paddingTop = (el('top').offsetHeight + 10) + 'px';
@@ -1093,6 +1305,64 @@ function setNum(name, value) {
   fetch(`/api/numsetting?name=${name}&value=${value}`, {method:'POST'});
 }
 
+/* ---- per-map settings ---- */
+const MS_KEYS = [
+  'timeScale','startHour','startMinute','timedPrison',
+  'ambience','spotlightHours',
+  'playerMoney','healthRegen','energyRegen','heatDecay',
+  'generatorDowntime','cctvSpeed','sniperDamage','sniperHeatThreshold','startingAlertness'
+];
+
+async function msLoad() {
+  try {
+    const d = await fetch('/api/map-settings').then(r => r.json());
+    const s = d.settings || {};
+    for (const k of MS_KEYS) {
+      const inp = el('ms_' + k);
+      if (!inp) continue;
+      if (s[k] !== undefined) {
+        inp.value = s[k];
+        inp.classList.add('ms-active');
+      } else {
+        inp.value = '';
+        inp.classList.remove('ms-active');
+      }
+    }
+    const n = Object.keys(s).length;
+    const badge = el('ms_badge');
+    if (badge) {
+      badge.style.display = n > 0 ? '' : 'none';
+      badge.textContent = n + (n === 1 ? ' setting' : ' settings') + ' active';
+    }
+  } catch(e) { console.warn('msLoad', e); }
+}
+
+async function msSet(key, value) {
+  value = (value || '').trim();
+  if (!value) { await msUnset(key, 'ms_' + key); return; }
+  await fetch(`/api/map-settings/set?key=${encodeURIComponent(key)}&value=${encodeURIComponent(value)}`, {method:'POST'});
+  const inp = el('ms_' + key);
+  if (inp) inp.classList.add('ms-active');
+  await msLoad();
+}
+
+async function msUnset(key, inputId) {
+  await fetch(`/api/map-settings/unset?key=${encodeURIComponent(key)}`, {method:'POST'});
+  if (inputId) {
+    const inp = el(inputId);
+    if (inp) { inp.value = ''; inp.classList.remove('ms-active'); }
+  }
+  await msLoad();
+}
+
+async function msClearAll() {
+  if (!confirm('Clear all per-map settings for this map?')) return;
+  await fetch('/api/map-settings/clear', {method:'POST'});
+  await msLoad();
+}
+
+
+
 async function cheat(name) {
   await post('/api/cheat?name=' + name);
   refreshGameplay();
@@ -1237,7 +1507,89 @@ async function armStamp() {
   });
 })();
 
-/* ---- gameplay tab ---- */
+  /* ---- custom assets tab (Tools page card) ---- */
+  async function refreshCaBundles() {
+    try {
+      const bundles = await (await fetch('/api/custom-assets/bundles')).json();
+      const sel = el('ca_bundle');
+      const prev = sel.value;
+      sel.innerHTML = '<option value=\"\">— pick a bundle —</option>' +
+        bundles.map(b => `<option value=\"${esc(b)}\"${b === prev ? ' selected' : ''}>${esc(b)}</option>`).join('');
+      if (prev && bundles.includes(prev)) {
+        loadCaAssets();
+      } else {
+        el('ca_asset_list').style.display = 'none';
+      }
+    } catch(e) {
+      msg('Could not load bundle list: ' + e);
+    }
+  }
+
+  async function loadCaAssets() {
+    const bundle = el('ca_bundle').value;
+    if (!bundle) { el('ca_asset_list').style.display = 'none'; return; }
+    try {
+      const assets = await (await fetch('/api/custom-assets/list?bundle=' + encodeURIComponent(bundle))).json();
+      const sel = el('ca_asset');
+      sel.innerHTML = '<option value=\"\">— pick an asset —</option>' +
+        assets.map(a => `<option value=\"${esc(a)}\">${esc(a)}</option>`).join('');
+      el('ca_asset_list').style.display = '';
+      el('ca_place_btn').disabled = assets.length === 0;
+    } catch(e) {
+      msg('Could not list assets: ' + e);
+    }
+  }
+
+  async function caPlaceCursor() {
+    const bundle = el('ca_bundle').value;
+    const asset  = el('ca_asset').value;
+    if (!bundle || !asset) { msg('Select a bundle and asset first'); return; }
+    const r = await post(`/api/custom-assets/place-cursor?bundle=${encodeURIComponent(bundle)}&asset=${encodeURIComponent(asset)}`);
+    if (r.ok) {
+      msg(`Placed ${asset} @ (${r.x},${r.y},${r.layer}) — ${r.count} total`);
+      refreshCaPlaced();
+    }
+  }
+
+  async function caEraseCursor() {
+    const r = await post('/api/custom-assets/erase-cursor');
+    if (r.ok) {
+      msg(r.removed ? `Erased ${r.removed} custom asset(s) — ${r.count} remain` : 'No custom asset at cursor');
+      refreshCaPlaced();
+    }
+  }
+
+  async function caClearAll() {
+    if (!confirm('Remove ALL custom asset placements from this map?')) return;
+    await post('/api/custom-assets/clear');
+    refreshCaPlaced();
+    msg('All custom asset placements cleared');
+  }
+
+  async function refreshCaPlaced() {
+    try {
+      const list = await (await fetch('/api/custom-assets')).json();
+      const div = el('ca_placed');
+      if (list.length === 0) {
+        div.style.display = 'none';
+        div.innerHTML = '';
+      } else {
+        div.style.display = '';
+        div.innerHTML = '<table style=\"width:100%;border-collapse:collapse;font-size:11px\">' +
+          '<tr><th style=\"text-align:left;color:#7a7ab0\">Bundle</th>' +
+          '<th style=\"text-align:left;color:#7a7ab0\">Asset</th>' +
+          '<th style=\"text-align:left;color:#7a7ab0\">Tile</th></tr>' +
+          list.map(p =>
+            `<tr><td>${esc(p.bundle)}</td><td>${esc(p.asset)}</td>` +
+            `<td>(${p.x},${p.y},L${p.layer})</td></tr>`
+          ).join('') + '</table>';
+      }
+      const cnt = el('ca_count');
+      if (cnt) cnt.textContent = list.length ? `(${list.length} placed)` : '';
+    } catch(e) {}
+  }
+
+  /* ---- gameplay tab ---- */
 async function refreshGameplay() {
   try {
     const f = await (await fetch('/api/floors')).json();
@@ -1256,15 +1608,38 @@ async function refreshGameplay() {
         }
       }
     }
+    // Virtual layer buttons (only shown when sidecar layers exist)
+    try {
+      const geom = await (await fetch('/api/layers')).json();
+      if (geom && geom.layers && geom.layers.length > 0) {
+        const vbEl = el('virtualLayerBtns');
+        if (vbEl) {
+          vbEl.innerHTML = geom.layers.map((lyr, vi) =>
+            `<button id='vl_${vi}' onclick='pickVirtualLayer(${vi},${lyr.backingLayer})'>` +
+            `#${vi} ${esc(lyr.name)}</button>`).join('');
+        }
+      }
+    } catch (_) { /* no virtual layers */ }
   } catch (e) { /* not reachable */ }
   refreshPlayer();
 }
 
 function pickFloor(i) {
   curFloor = i;
+  curVirtualLayer = -1;
   document.querySelectorAll(""[id^='fl_']"").forEach(b =>
     b.classList.toggle('active', b.id === 'fl_' + i));
+  document.querySelectorAll(""[id^='vl_']"").forEach(b => b.classList.remove('active'));
   el('mapimg').src = '/api/map/' + i + '.png?t=' + Date.now();
+}
+
+function pickVirtualLayer(vi, backingFloor) {
+  curVirtualLayer = vi;
+  curFloor = backingFloor;
+  document.querySelectorAll(""[id^='vl_']"").forEach(b =>
+    b.classList.toggle('active', b.id === 'vl_' + vi));
+  document.querySelectorAll(""[id^='fl_']"").forEach(b => b.classList.remove('active'));
+  el('mapimg').src = '/api/map/v/' + vi + '.png?t=' + Date.now();
 }
 
 function mapError() {
@@ -1283,7 +1658,9 @@ async function refreshPlayer() {
       `<span><b>${esc(p.name)}</b></span>` +
       `<span>❤ <b>${p.health}</b></span><span>⚡ <b>${p.energy}</b></span>` +
       `<span>$ <b>${p.money}</b></span><span>🔥 heat <b>${p.heat}</b></span>` +
-      (p.tile ? `<span>tile <b>(${p.tile.x},${p.tile.y})</b> floor <b>${p.tile.floor}</b></span>` : '');
+      (p.tile ? `<span>tile <b>(${p.tile.x},${p.tile.y})</b> floor <b>${p.tile.floor}</b>` +
+        (p.tile.virtualLayer >= 0 ? ` vLayer <b>${p.tile.virtualLayer}</b>` : '') +
+        `</span>` : '');
     el('s_infiniteEnergy').checked = p.infiniteEnergy;
     placeMarker(p.tile);
   } catch (e) { /* ignore */ }
@@ -1313,7 +1690,10 @@ async function mapClick(ev) {
   const maxY = geom.originY + geom.height - 1;
   const tx = Math.max(geom.originX, Math.min(maxX, Math.floor((px - 1) / mapTileSize)));
   const ty = Math.max(geom.originY, Math.min(maxY, Math.floor((img.naturalHeight - py - 1) / mapTileSize)));
-  await post(`/api/teleport?x=${tx}&y=${ty}&floor=${curFloor}`);
+  const url = curVirtualLayer >= 0
+    ? `/api/teleport?x=${tx}&y=${ty}&virtualLayer=${curVirtualLayer}`
+    : `/api/teleport?x=${tx}&y=${ty}&floor=${curFloor}`;
+  await post(url);
   refreshPlayer();
 }
 
@@ -1334,6 +1714,9 @@ function openLayerStack() {
 }
 
 function closeLayerStack() { el('layer_overlay').classList.remove('show'); }
+
+let _dragSrcIndex = null;   // index being dragged from layer stack
+let _dragSrcTrash = null;   // trashIndex being dragged from trash bin
 
 function renderLayerStack() {
   const geom = lastState && lastState.mapGeometry;
@@ -1361,10 +1744,18 @@ function renderLayerStack() {
   geom.layers.forEach((layer, i) => {
     const sheet = document.createElement('div');
     const typeKey = (layer.type || 'Ground').toLowerCase();
-    sheet.className = 'layer-sheet type-' + typeKey + (i === selected ? ' selected' : '');
+    const isHidden = !!layer.hidden;
+    let cls = 'layer-sheet type-' + typeKey;
+    if (i === selected) cls += ' selected';
+    if (isHidden) cls += ' hidden-layer';
+    sheet.className = cls;
     sheet.style.zIndex = (i + 1).toString();
+    sheet.draggable = true;
+    sheet.dataset.layerIndex = i;
     const opts = LAYER_TYPES.map(t =>
       `<option value=""${t}"" ${layer.type === t ? 'selected' : ''}>${t}</option>`).join('');
+    const eyeIcon = isHidden ? '🙈' : '👁';
+    const eyeTitle = isHidden ? 'Show in game' : 'Hide from game';
     sheet.innerHTML =
       `<div class=""layer-sheet-head"">
         <span class=""layer-idx"">#${i}</span>
@@ -1374,14 +1765,102 @@ function renderLayerStack() {
       <div class=""layer-meta"">Native backing layer ${layer.backingLayer}</div>
       <div class=""layer-actions"">
         <button onclick=""geoSelect(${i})"">${i === selected ? '● Selected' : 'Select'}</button>
-        <button onclick=""geoMove(${i},-1)"" title=""Move up in stack"">↑</button>
-        <button onclick=""geoMove(${i},1)"" title=""Move down in stack"">↓</button>
+        <button onclick=""geoHide(${i},${!isHidden})"" title=""${eyeTitle}"">${eyeIcon}</button>
         <button onclick=""geoDuplicate(${i})"">Duplicate</button>
-        <button class=""danger"" onclick=""geoRemove(${i})"">Remove</button>
+        <button class=""danger"" onclick=""geoRemove(${i})"">🗑 Delete</button>
         <select onchange=""geoType(${i},this.value)"">${opts}</select>
       </div>`;
+    // drag-and-drop: reorder
+    sheet.addEventListener('dragstart', e => {
+      _dragSrcIndex = i;
+      _dragSrcTrash = null;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', 'layer:' + i);
+      setTimeout(() => sheet.classList.add('dragging'), 0);
+    });
+    sheet.addEventListener('dragend', () => {
+      sheet.classList.remove('dragging');
+      document.querySelectorAll('.drag-over-top,.drag-over-bottom')
+        .forEach(n => n.classList.remove('drag-over-top','drag-over-bottom'));
+    });
+    sheet.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = sheet.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      document.querySelectorAll('.drag-over-top,.drag-over-bottom')
+        .forEach(n => n.classList.remove('drag-over-top','drag-over-bottom'));
+      if (e.clientY < mid) sheet.classList.add('drag-over-top');
+      else sheet.classList.add('drag-over-bottom');
+    });
+    sheet.addEventListener('dragleave', () => {
+      sheet.classList.remove('drag-over-top','drag-over-bottom');
+    });
+    sheet.addEventListener('drop', async e => {
+      e.preventDefault();
+      sheet.classList.remove('drag-over-top','drag-over-bottom');
+      if (_dragSrcTrash !== null) {
+        // restore from trash into position i
+        await geoApply(await post('/api/geometry/restore?trashIndex=' + _dragSrcTrash));
+        _dragSrcTrash = null;
+        return;
+      }
+      if (_dragSrcIndex === null || _dragSrcIndex === i) return;
+      const delta = i - _dragSrcIndex;
+      await geoApply(await post('/api/geometry/move?index=' + _dragSrcIndex + '&delta=' + delta));
+      _dragSrcIndex = null;
+    });
     stack.appendChild(sheet);
   });
+  renderTrashBin(geom.trash || []);
+}
+
+function renderTrashBin(trashItems) {
+  const area = el('trash_drop_area');
+  // keep the drop hint but remove old tiles
+  const hint = el('trash_drop_hint');
+  area.innerHTML = '';
+  area.appendChild(hint);
+  hint.style.display = trashItems.length ? 'none' : 'block';
+  trashItems.forEach((layer, ti) => {
+    const tile = document.createElement('div');
+    tile.className = 'trash-tile';
+    tile.draggable = true;
+    tile.dataset.trashIndex = ti;
+    tile.innerHTML =
+      `<strong>${layerEsc(layer.name)}</strong>
+       <span>${layerEsc(layer.type)}</span>
+       <button class=""restore-btn"" onclick=""geoRestore(${layer.trashIndex})"">↩ Restore</button>`;
+    tile.addEventListener('dragstart', e => {
+      _dragSrcTrash = ti;
+      _dragSrcIndex = null;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', 'trash:' + ti);
+    });
+    area.appendChild(tile);
+  });
+}
+
+// Drop onto main layer area from trash (restore)
+async function onDropTrashRestore(e) {
+  e.preventDefault();
+  if (_dragSrcTrash === null) return;
+  await geoApply(await post('/api/geometry/restore?trashIndex=' + _dragSrcTrash));
+  _dragSrcTrash = null;
+}
+
+function onTrashDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  el('trash_drop_area').classList.add('drag-active');
+}
+function onTrashDragLeave() { el('trash_drop_area').classList.remove('drag-active'); }
+async function onDropToTrash(e) {
+  e.preventDefault();
+  el('trash_drop_area').classList.remove('drag-active');
+  if (_dragSrcIndex === null) return;
+  await geoApply(await post('/api/geometry/remove?index=' + _dragSrcIndex));
+  _dragSrcIndex = null;
 }
 
 async function geoApply(r) {
@@ -1401,6 +1880,8 @@ async function geoRemove(i) {
 async function geoMove(i, delta) { await geoApply(await post('/api/geometry/move?index=' + i + '&delta=' + delta)); }
 async function geoDuplicate(i) { await geoApply(await post('/api/geometry/duplicate?index=' + i)); }
 async function geoType(i, type) { await geoApply(await post('/api/geometry/type?index=' + i + '&type=' + type)); }
+async function geoHide(i, hidden) { await geoApply(await post('/api/geometry/hide?index=' + i + '&hidden=' + hidden)); }
+async function geoRestore(ti) { await geoApply(await post('/api/geometry/restore?trashIndex=' + ti)); }
 async function geoBoundsDelta(field, delta) {
   await geoApply(await post('/api/geometry/bounds-delta?field=' + field + '&delta=' + delta));
 }
@@ -1419,6 +1900,7 @@ async function poll() {
       (s.cursor ? ` — cursor (${s.cursor.x},${s.cursor.y})` : '') +
       ` — fences ${s.fences}, links ${s.triggers}, tiles ${s.modTiles}` +
       (s.animatedTiles ? `, animated ${s.animatedTiles}` : '') +
+      (s.customAssets ? `, custom ${s.customAssets}` : '') +
       (s.missingAtlases && s.missingAtlases.length
         ? ` — ⚠ missing atlases: ${s.missingAtlases.join(', ')} (harvest their sets!)` : '') +
       (s.tool && s.tool !== 'none' ? ` — TOOL ${s.tool}: ${s.toolHint}` : '');
@@ -1451,10 +1933,45 @@ async function poll() {
     if (s.inEditor && blocks.length === 0) loadBlocks();
     if (el('page_gameplay').classList.contains('on')) refreshPlayer();
     if (el('layer_overlay').classList.contains('show')) renderLayerStack();
+    if (el('page_settings') && el('page_settings').classList.contains('on')) refreshMp();
   } catch (e) {
     el('status').textContent = 'game not reachable';
   }
   setTimeout(poll, 1000);
+}
+
+/* ---- multiplayer gate ---- */
+async function refreshMp() {
+  try {
+    const m = await (await fetch('/api/multiplayer')).json();
+    const card = el('mp_card');
+    const statusEl = el('mp_status');
+    const actionsEl = el('mp_actions');
+    if (!m.inRoom) {
+      statusEl.textContent = 'Not in a multiplayer room.';
+      actionsEl.style.display = 'none';
+    } else {
+      const role = m.isHost ? 'Host' : 'Client';
+      let txt = role + ' — in Photon room.';
+      if (m.requiresMod) {
+        txt += ' 🔑 Room property set: requires mod v' + (m.roomModVersion || '?') + '.';
+      } else {
+        txt += ' No mod-required property set.';
+      }
+      statusEl.textContent = txt;
+      actionsEl.style.display = m.isHost ? '' : 'none';
+    }
+  } catch (_) {}
+}
+async function mpAnnounce() {
+  const r = await post('/api/multiplayer/announce');
+  msg(r.ok ? 'Room property set ✓' : 'Failed to set room property (not host or not in room)');
+  await refreshMp();
+}
+async function mpRefresh() {
+  await post('/api/multiplayer/refresh');
+  await refreshMp();
+  msg('Room state refreshed');
 }
 
 /* ---- modal ---- */
@@ -2793,9 +3310,12 @@ padMain();
 poll();
 loadPrefs();
 loadBlocks();
+refreshCaBundles();
+refreshCaPlaced();
 setInterval(() => {
   if (el('page_gameplay').classList.contains('on')) refreshGameplay();
   if (el('page_tilesets').classList.contains('on')) refreshTilesets();
+  if (el('page_tools').classList.contains('on')) refreshCaPlaced();
 }, 3000);
 </script>
 </body>

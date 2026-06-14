@@ -59,6 +59,7 @@ jobs:
           cp installer/install.sh  stage/installer/
           chmod +x stage/installer/install.sh
           cp docs/user-install.md stage/README-INSTALL.md
+          cp CHANGELOG.md stage/CHANGELOG.md
 
       - name: Verify contents
         run: |
@@ -81,34 +82,34 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ inputs.version }}" \
-            --repo "${{ github.repository }}" \
-            --title "${{ inputs.version }}" \
-            --notes "$(cat <<'NOTES'
-          ## What's new
+          # Extract the [Unreleased] section from CHANGELOG.md for release notes.
+          # Falls back to a generic message if extraction fails.
+          NOTES=$(python3 -c "
+          import re, sys
+          text = open('CHANGELOG.md').read()
+          m = re.search(r'## \[Unreleased\]\n(.*?)(?=\n## \[|\Z)', text, re.DOTALL)
+          if m:
+              sys.stdout.write(m.group(1).strip())
+          else:
+              sys.stdout.write('See CHANGELOG.md for details.')
+          " 2>/dev/null || echo "See CHANGELOG.md for details.")
 
-          ### ${{ inputs.version }}
-
-          Adds a **one-click installer** — no more manual BepInEx setup.
+          INSTALL_HEADER="## Install
 
           | Platform | How to install |
           |----------|---------------|
-          | **Windows** | Extract zip → double-click `installer\install.bat` |
-          | **Linux / Steam Deck** | Extract zip → `cd installer && ./install.sh` |
+          | **Windows** | Extract zip → double-click \`installer\\install.bat\` |
+          | **Linux / Steam Deck** | Extract zip → \`cd installer && ./install.sh\` |
 
-          The installer:
-          - Auto-detects the game folder (common Steam paths)
-          - Asks you to confirm or enter a custom path
-          - Downloads and installs **BepInEx 5.4.21** (the only supported version)
-          - Copies the mod DLLs into the right place
-          - Patches `run_bepinex.sh` on Linux/Steam Deck automatically
-          - Supports uninstall: `install.bat uninstall` / `./install.sh uninstall`
-
-          DLLs are identical to ${{ inputs.source_tag }} (mod code unchanged; only the installer was added).
+          DLLs sourced from ${{ inputs.source_tag }}.
 
           ---
-          Think this tool should be extended and improved? Vote here: https://github.com/anonymusdennis/E2E-Mapeditor-V2.0/issues/5
-          NOTES
-          )" \
+
+          "
+
+          gh release create "${{ inputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --title "E2E Map Editor ${{ inputs.version }}" \
+            --notes "${INSTALL_HEADER}${NOTES}" \
             ${{ inputs.prerelease == 'true' && '--prerelease' || '' }} \
             "${{ env.ZIP }}"

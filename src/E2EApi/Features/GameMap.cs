@@ -68,7 +68,21 @@ namespace E2EApi.Features
             }
         }
 
+        /// <summary>
+        /// PNG for a virtual layer. Resolves the virtual index to its backing
+        /// physical floor via <see cref="MapGeometry.GetBackingLayer"/> and
+        /// returns the same texture as <see cref="GetFloorPng"/>.
+        /// Returns <c>null</c> when the index is out-of-range or the texture
+        /// is unavailable.
+        /// </summary>
+        public static byte[] GetVirtualLayerPng(int virtualIndex)
+        {
+            if (virtualIndex < 0 || virtualIndex >= MapGeometry.LayerCount) return null;
+            int backing = MapGeometry.GetBackingLayer(virtualIndex);
+            return GetFloorPng(backing);
+        }
         private static byte[] EncodeUnreadable(Texture2D texture)
+
         {
             var rt = RenderTexture.GetTemporary(texture.width, texture.height, 0,
                 RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);

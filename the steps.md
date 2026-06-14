@@ -182,11 +182,12 @@ output, V0 feature list is written.
     link tool; arrows visualize links)
   - runtime: E on a button tile fires its links — action set is currently
     fence toggle only (doors etc. = future actions)
-- [ ] Custom assets in maps via AssetBundles (Unity 5.5-compatible build
-      pipeline) — **only partially done:** `Editor.CustomAssets` can load
-      bundles and spawn prefabs at runtime, but custom assets are not yet
-      placeable map content: nothing persists them to the sidecar, there is
-      no editor UI, and no Unity 5.5 bundle build pipeline exists
+- [x] Custom assets in maps via AssetBundles (Unity 5.5-compatible build
+      pipeline) — `CustomAssetPlacements` tracks placed prefabs per tile,
+      persists them in the sidecar `[custom_assets]` section, spawns/destroys
+      instances with editor lifecycle. Web API (`/api/custom-assets/*`) and
+      a Tools-tab UI card let you pick a bundle+asset and place at the cursor.
+      Unity 5.5 bundle build: see `docs/bundle-build-pipeline.md`.
 - [x] Persistence: mod-extras sidecar next to `Level.dat`
       (`Level.e2e` text format) + "requires mod" flag
 - [x] Maps without mod-extras stay 100% vanilla-compatible (sidecar is
@@ -234,6 +235,71 @@ finished save carries the fallback, and the web UI browses all harvested sets.
 
 ---
 
+## Phase 7.6 — Virtual map layers (multi-floor geometry)
+
+**Goal:** maps can define more than 6 virtual layers sharing the game's 6
+physical floors, with per-character floor state tracked and exposed over the
+web API so scripts can navigate by virtual layer index.
+
+- [x] `MapGeometry` core: virtual layer list (`VirtualLayer`: id, name, type,
+      backingLayer, hidden), sidecar `[geometry]` section, `SelectLayer`,
+      `GetBackingLayer`, `ToJson`, `Apply`
+- [x] `FloorTypeRegistry`: runtime physical→virtualType mapping; rebuilt from
+      `MapGeometry.Apply()` and loaded from `[floor_type_map]` sidecar section
+- [x] `VirtualFloorState`: per-character virtual layer index stored in a
+      `ConditionalWeakTable`; `Set`/`TryGet` API
+- [x] Floor predicate patches: `IsVent`, `IsUnderground`, `IsGround`, `IsRoof`
+      use `FloorTypeRegistry` wrappers so custom types win over native enum
+- [x] Navigation patches: `FloorManager.UpAFloor`/`DownAFloor`,
+      `Character.CanAccessVent`, stair/ladder direction comparisons patched to
+      respect the virtual ordering
+- [x] Z-lookup patches: `Grid.TileToWorld` z-depth disambiguates shared-backing
+      virtual layers using `VirtualFloorState`
+- [x] `CharacterFloorPatch`: postfix patches write `VirtualFloorState` whenever
+      `Player.Teleport` or `Character.set_CurrentFloor`/`SetFloor` runs
+- [x] `Player.GetTile` virtual layer overload; `Player.TeleportToTile` virtual
+      layer overload (resolves backing layer, writes state on success)
+- [x] Web API: `GET /api/layers` alias, `POST /api/layers/select`,
+      `GET /api/map/v/{vi}.png`, updated `/api/player` (adds `virtualLayer`),
+      updated `POST /api/teleport` (accepts `virtualLayer`),
+      `GET /api/debug/floor-registry`, `GET /api/debug/virtual-floors`
+- [x] Web UI: `curVirtualLayer` state, virtual layer buttons in gameplay tab
+      (`pickVirtualLayer`), player stats show `vLayer`, `mapClick` sends
+      `virtualLayer` when active
+
+**Done when:** a map with shared-backing virtual layers lets the player
+navigate between them via the web UI, teleport to a tile on a specific virtual
+layer, and show the correct Z-depth in-game.
+
+---
+
+## Phase 7.7 — Per-map gameplay settings (`[mapSettings]`)
+
+**Goal:** map authors can tune gameplay rules (time, audio, player stats, security
+hardware) per map via the web UI; settings survive in the Level.e2e sidecar and
+are applied automatically at play time.
+
+- [x] `MapSettings` feature class in `E2EApi/Features/` — sidecar-backed key=value
+      store (`[mapSettings]` section), `Get`/`Set`/`Unset`/`Clear` API, `ToJson()`
+- [x] Harmony patches (nested in `MapSettings`):
+  - `RoutineManager.GetCurrentGameSecondsPerRealSecond` postfix → `timeScale`
+  - `LevelSetup_RoutineManager.Setup` postfix → `startHour`/`startMinute`,
+    `timedPrison`, `ambience`, `spotlightHours`
+- [x] Scene sweep via `GameEvents.LevelLoaded` → `generatorDowntime`, `cctvSpeed`,
+      `sniperDamage`/`sniperHeatThreshold`, `startingAlertness`
+- [x] PrisonConfig mutation (snapshot + restore on unload) →
+      `playerMoney`, `healthRegen`, `energyRegen`, `heatDecay`
+- [x] Web API: `GET /api/map-settings`, `POST /api/map-settings/set`,
+      `/unset`, `/clear`
+- [x] Web UI: replaced "Per-map settings (coming)" placeholder with a full
+      grouped settings panel (Time, Audio, Player stats, Security hardware)
+      in the Settings tab; auto-refreshes on tab open
+
+**Done when:** a map with custom `timeScale=2.0 startHour=22 timedPrison=48h` saves,
+loads, and plays at double speed starting at 22:00 with a 48-hour escape deadline.
+
+---
+
 ## Phase 8 — Packaging and Windows validation
 
 **Goal:** anyone can install and use the mod; modders can use the API.
@@ -245,7 +311,9 @@ finished save carries the fallback, and the web UI browses all harvested sets.
 - [x] `docs/user-install.md` — Windows + Linux install guide
 - [x] `docs/api.md` — modder-facing API documentation (full E2EApi surface +
       the web API endpoints)
-- [ ] GitHub release / ModDB page — pending the Windows validation above
+- [x] GitHub release / ModDB page — GitHub release workflow (`release.yml`) +
+      CI installer validation (`ci.yml` runs on Linux **and** Windows runners);
+      ModDB page pending the Windows on-machine validation step above
 
 **Done when:** a clean Windows machine can install from the release zip and edit a map.
 
@@ -253,10 +321,15 @@ finished save carries the fallback, and the web UI browses all harvested sets.
 
 ## Phase 9 — Later / stretch
 
-- [ ] Multiplayer gate: "you need this mod to play this map"
-      (handshake via Photon custom properties)
-- [ ] Steam Workshop interplay for modded maps
-- [ ] External editor window as companion process (IPC)
+- [x] Multiplayer gate: "you need this mod to play this map"
+      (handshake via Photon custom properties — `E2EApi.Features.MultiplayerGate`;
+      reflection-based so the API DLL compiles without a hard Photon dependency)
+- [x] Steam Workshop interplay for modded maps
+      (`E2EApi.Features.WorkshopInterop` — stages `e2e_workshop_meta.txt`
+      alongside the sidecar on upload; fires `WorkshopMapLoaded` on download)
+- [x] External editor window as companion process (IPC)
+      — fulfilled by the web UI (real browser window at `http://127.0.0.1:8723`
+      talking HTTP to the mod; see Phase 5 Stage 2)
 
 ---
 

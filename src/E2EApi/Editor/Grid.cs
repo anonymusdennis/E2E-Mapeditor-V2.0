@@ -136,5 +136,6 @@ namespace E2EApi.Editor
             return x >= OriginX && x < OriginX + Width &&
                 y >= OriginY && y < OriginY + Height;
         }
+
     }
 }

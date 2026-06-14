@@ -129,11 +129,54 @@ namespace E2EApi.Players
         }
 
         /// <summary>
+        /// The player's tile position, physical floor index, and virtual layer index.
+        /// <paramref name="virtualLayer"/> is -1 when no virtual layer mapping exists
+        /// (vanilla map or no registry entries).
+        /// </summary>
+        public bool GetTile(out int x, out int y, out int floor, out int virtualLayer)
+        {
+            virtualLayer = -1;
+            if (!GetTile(out x, out y, out floor)) return false;
+            var pawn = Pawn;
+            if (pawn != null && Features.FloorTypeRegistry.HasEntries)
+            {
+                // Prefer the character's explicit VirtualFloorState (set on teleport /
+                // floor-change) over the registry's first-match for this physical floor.
+                Features.VirtualFloorState vfs;
+                if (Features.VirtualFloorState.TryGet(pawn, out vfs) &&
+                    vfs.PhysicalFloor != null &&
+                    vfs.PhysicalFloor.m_FloorIndex == floor)
+                {
+                    virtualLayer = vfs.VirtualIndex;
+                }
+                else
+                {
+                    var physFloor = FloorManager.GetInstance()?.FindFloorbyIndex(floor);
+                    if (physFloor != null)
+                        virtualLayer = Features.FloorTypeRegistry.GetVirtualIndex(physFloor);
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
         /// Instantly move the pawn to a tile on a floor (default: stay on the
         /// current floor). Uses the game's own <c>Character.Teleport</c>, so
         /// networking, cached positions and floor state all stay consistent.
         /// </summary>
         public bool TeleportToTile(int x, int y, int floor = -1)
+        {
+            return TeleportToTile(x, y, floor, virtualLayer: -1);
+        }
+
+        /// <summary>
+        /// Instantly move the pawn to a tile, targeting a specific virtual layer
+        /// (which resolves to its backing physical floor).  When
+        /// <paramref name="virtualLayer"/> is non-negative it takes precedence over
+        /// <paramref name="floor"/>.  <see cref="Features.VirtualFloorState"/> is
+        /// updated on success so Z-lookup disambiguation works immediately.
+        /// </summary>
+        public bool TeleportToTile(int x, int y, int floor, int virtualLayer)
         {
             var pawn = Pawn;
             if (pawn == null)
@@ -147,11 +190,27 @@ namespace E2EApi.Players
             }
             FloorManager.Floor target = pawn.CurrentFloor;
             var floors = FloorManager.GetInstance();
-            if (floor >= 0 && floors != null)
+
+            // Resolve floor from virtual layer index if provided.
+            if (virtualLayer >= 0 && floors != null &&
+                Features.FloorTypeRegistry.HasEntries)
+            {
+                int backing = Features.MapGeometry.GetBackingLayer(virtualLayer);
+                target = floors.FindFloorbyIndex(backing) ?? target;
+            }
+            else if (floor >= 0 && floors != null)
             {
                 target = floors.FindFloorbyIndex(floor) ?? target;
             }
-            return pawn.Teleport(new Vector3(world.Value.x, world.Value.y, world.Value.z), target);
+
+            bool ok = pawn.Teleport(new Vector3(world.Value.x, world.Value.y, world.Value.z), target);
+
+            // Write VirtualFloorState so Z-lookup disambiguation is immediately
+            // accurate for the virtual layer we aimed at.
+            if (ok && virtualLayer >= 0 && target != null)
+                Features.VirtualFloorState.Set(pawn, virtualLayer, target);
+
+            return ok;
         }
 
         /// <summary>

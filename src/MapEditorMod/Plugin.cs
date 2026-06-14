@@ -66,7 +66,11 @@ namespace MapEditorMod
             E2EApi.Features.ModTiles.Initialise();
             E2EApi.Features.AnimatedModTiles.Initialise();
             E2EApi.Features.MapGeometry.Initialise();
+            E2EApi.Features.CustomAssetPlacements.Initialise();
+            E2EApi.Features.MapSettings.Initialise();
             E2EApi.Persistence.VanillaFallback.Initialise();
+            E2EApi.Features.MultiplayerGate.Initialise();
+            E2EApi.Features.WorkshopInterop.Initialise();
 
             GameEvents.LevelLoaded += () =>
             {
@@ -397,6 +401,6 @@ namespace MapEditorMod
     {
         public const string Guid = "org.anonymusdennis.e2e.mapeditor";
         public const string Name = "E2E Map Editor";
-        public const string Version = "2.1.0";
+        public const string Version = "2.4.0";
     }
 }

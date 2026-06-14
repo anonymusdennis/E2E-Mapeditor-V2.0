@@ -32,6 +32,11 @@ namespace E2EApi.Features
             public string Name;
             public VirtualLayerType Type;
             public int BackingLayer;
+            /// <summary>
+            /// When true the layer is visually hidden from the game view unless it is
+            /// the currently selected editing layer (in which case it is temporarily shown).
+            /// </summary>
+            public bool Hidden;
 
             public VirtualLayer Clone()
             {
@@ -41,6 +46,7 @@ namespace E2EApi.Features
                     Name = Name,
                     Type = Type,
                     BackingLayer = BackingLayer,
+                    Hidden = Hidden,
                 };
             }
         }
@@ -78,6 +84,7 @@ namespace E2EApi.Features
         private static int _lastNativeLayer = -1;
         private static bool _virtualSelectionChanged;
         private static string _loadMismatchWarning;
+        private static readonly List<VirtualLayer> _trashBin = new List<VirtualLayer>();
 
         public static event Action Changed;
 
@@ -91,6 +98,8 @@ namespace E2EApi.Features
         public static int SelectedVirtualLayerId => GetLayer(SelectedVirtualLayerIndex).Id;
         public static string CompatibilityHash => ComputeHash(_current);
         public static int Version { get; private set; }
+        public static IReadOnlyList<VirtualLayer> TrashBin => _trashBin;
+        public static int TrashCount => _trashBin.Count;
         public static bool IsNativeCompatible =>
             Width == NativeWidth && Height == NativeHeight && OriginX == 0 &&
             OriginY == 0 && LayerCount == NativeLayerCount;
@@ -104,8 +113,18 @@ namespace E2EApi.Features
             _initialised = true;
             ModExtras.EnsurePatched();
             ModExtras.Saving += OnSaving;
+            // MapGeometry.OnLoaded must subscribe before FloorTypeRegistry.OnLoaded
+            // so that the registry can read a fully-populated MapGeometry.Current.
             ModExtras.Loaded += OnLoaded;
+            FloorTypeRegistry.Initialise();
+            // Ensure runtime floor patches are active.
+            Editor.Patches.FloorPredicatePatchGroup.EnsurePatched();
+            Editor.Patches.FloorNavigationPatchGroup.EnsurePatched();
+            Editor.Patches.StairsPatchGroup.EnsurePatched();
+            Editor.Patches.FloorZLookupPatchGroup.EnsurePatched();
+            Editor.Patches.CharacterFloorPatchGroup.EnsurePatched();
             VirtualLayerListUi.Initialise();
+            Editor.Patches.MapExpansionPatchRegistrar.EnsurePatched();
         }
 
         public static VirtualLayer GetLayer(int index)
@@ -131,11 +150,89 @@ namespace E2EApi.Features
             }
         }
 
+        /// <summary>
+        /// Picks the least-used native backing layer for a new virtual layer of the given type.
+        /// Prefers type-appropriate layers first so that same-type virtual layers don't all
+        /// collide on the same native slot.
+        /// </summary>
+        /// <param name="type">The virtual layer type for the new floor.</param>
+        /// <param name="excludeBackingLayer">
+        /// When ≥ 0, this backing-layer slot is skipped as a first choice so that a duplicate
+        /// or new layer never silently shares the exact same physical floor as its source.
+        /// Falls back to the excluded slot only when every other slot is equally (or more) used.
+        /// </param>
+        /// <remarks>
+        /// Priority rationale:
+        ///   Underground → {0, 1, 2, 3, 4, 5} : native Underground first, then overflow upward
+        ///   Vent        → {2, 4, 1, 3, 0, 5} : native vent slots first, then non-vents
+        ///   Roof        → {5, 3, 1, 0, 2, 4} : native Roof first, then upper floors, then lower
+        ///   Ground      → {1, 3, 0, 2, 4, 5} : native GroundFloor/FirstFloor first, then rest
+        /// </remarks>
+        private static int SmartBackingLayer(VirtualLayerType type, int excludeBackingLayer = -1)
+        {
+            int[] preferred;
+            switch (type)
+            {
+                case VirtualLayerType.Underground: preferred = new[] { 0, 1, 2, 3, 4, 5 }; break;
+                case VirtualLayerType.Vent:        preferred = new[] { 2, 4, 1, 3, 0, 5 }; break;
+                case VirtualLayerType.Roof:        preferred = new[] { 5, 3, 1, 0, 2, 4 }; break;
+                default:                           preferred = new[] { 1, 3, 0, 2, 4, 5 }; break;
+            }
+            var usage = new int[NativeLayerCount];
+            foreach (var layer in _current.Layers)
+            {
+                if (layer.BackingLayer >= 0 && layer.BackingLayer < NativeLayerCount)
+                {
+                    usage[layer.BackingLayer]++;
+                }
+            }
+
+            // First pass: find the least-used slot that is NOT the excluded one.
+            int best = -1;
+            int bestUsage = int.MaxValue;
+            foreach (int n in preferred)
+            {
+                if (n == excludeBackingLayer) continue;
+                if (usage[n] < bestUsage)
+                {
+                    bestUsage = usage[n];
+                    best = n;
+                    if (bestUsage == 0) break;
+                }
+            }
+
+            // If no non-excluded slot exists (e.g. excludeBackingLayer covers all options),
+            // fall back to the excluded slot itself so we always return a valid index.
+            if (best < 0)
+            {
+                best = excludeBackingLayer >= 0 && excludeBackingLayer < NativeLayerCount
+                    ? excludeBackingLayer
+                    : preferred[0];
+            }
+            else if (excludeBackingLayer >= 0 && excludeBackingLayer < NativeLayerCount)
+            {
+                // Second pass: if the excluded slot is less used than our best non-excluded
+                // choice, override only when it would genuinely reduce sharing.
+                // (Prefer any non-excluded slot with equal or lower usage to avoid sharing.)
+                // We keep "best" (non-excluded) unless the excluded slot has strictly lower
+                // usage than every other option — which can only happen if bestUsage > 0.
+                // In that case the excluded slot is still the better physical choice.
+                if (usage[excludeBackingLayer] < bestUsage)
+                {
+                    // Every non-excluded slot is MORE used; reluctantly fall back.
+                    best = excludeBackingLayer;
+                }
+            }
+
+            return best;
+        }
+
         public static void SelectLayer(int index)
         {
             _selectedIndex = ClampLayerIndex(index);
             _virtualSelectionChanged = true;
             SyncNativeEditorLayer();
+            ApplyLayerVisibility();
             FireChanged();
         }
 
@@ -149,6 +246,7 @@ namespace E2EApi.Features
             _current = Sanitize(state);
             _selectedIndex = ClampLayerIndex(_selectedIndex);
             _virtualSelectionChanged = true;
+            FloorTypeRegistry.RebuildFromGeometry();
             FireChanged();
         }
 
@@ -180,7 +278,7 @@ namespace E2EApi.Features
                 Id = id,
                 Name = DefaultName(type, state.Layers.Count),
                 Type = type,
-                BackingLayer = NativeLayerForType(type),
+                BackingLayer = SmartBackingLayer(type),
             });
             Apply(state);
             SelectLayer(state.Layers.Count - 1);
@@ -194,8 +292,51 @@ namespace E2EApi.Features
             }
             var state = _current.Clone();
             index = Math.Max(0, Math.Min(index, state.Layers.Count - 1));
+            _trashBin.Add(state.Layers[index].Clone());
             state.Layers.RemoveAt(index);
             Apply(state);
+        }
+
+        /// <summary>Restore a previously removed layer from the trash bin.</summary>
+        public static void RestoreFromTrash(int trashIndex)
+        {
+            if (trashIndex < 0 || trashIndex >= _trashBin.Count)
+            {
+                return;
+            }
+            var trashed = _trashBin[trashIndex].Clone();
+            _trashBin.RemoveAt(trashIndex);
+            var state = _current.Clone();
+            int id = 0;
+            foreach (var layer in state.Layers)
+            {
+                if (layer.Id >= id) id = layer.Id + 1;
+            }
+            trashed.Id = id;
+            state.Layers.Add(trashed);
+            Apply(state);
+            SelectLayer(state.Layers.Count - 1);
+        }
+
+        /// <summary>Permanently discard all trashed layers.</summary>
+        public static void ClearTrash()
+        {
+            if (_trashBin.Count == 0)
+            {
+                return;
+            }
+            _trashBin.Clear();
+            FireChanged();
+        }
+
+        public static void SetLayerHidden(int index, bool hidden)
+        {
+            EnsureValid();
+            var state = _current.Clone();
+            index = Math.Max(0, Math.Min(index, state.Layers.Count - 1));
+            state.Layers[index].Hidden = hidden;
+            Apply(state);
+            ApplyLayerVisibility();
         }
 
         public static void MoveLayer(int index, int delta)
@@ -219,7 +360,7 @@ namespace E2EApi.Features
             var state = _current.Clone();
             index = Math.Max(0, Math.Min(index, state.Layers.Count - 1));
             state.Layers[index].Type = type;
-            state.Layers[index].BackingLayer = NativeLayerForType(type);
+            state.Layers[index].BackingLayer = SmartBackingLayer(type);
             state.Layers[index].Name = DefaultName(type, index);
             Apply(state);
         }
@@ -234,12 +375,14 @@ namespace E2EApi.Features
             {
                 if (layer.Id >= id) id = layer.Id + 1;
             }
+            // Pick a new backing layer that is different from the source so the
+            // duplicate is a genuinely independent physical floor, not a shared alias.
             state.Layers.Insert(index + 1, new VirtualLayer
             {
                 Id = id,
                 Name = source.Name + " copy",
                 Type = source.Type,
-                BackingLayer = source.BackingLayer,
+                BackingLayer = SmartBackingLayer(source.Type, excludeBackingLayer: source.BackingLayer),
             });
             Apply(state);
             SelectLayer(index + 1);
@@ -300,6 +443,19 @@ namespace E2EApi.Features
                   .Append(",\"name\":\"").Append(JsonEscape(layer.Name)).Append("\"")
                   .Append(",\"type\":\"").Append(layer.Type).Append("\"")
                   .Append(",\"backingLayer\":").Append(layer.BackingLayer)
+                  .Append(",\"hidden\":").Append(layer.Hidden ? "true" : "false")
+                  .Append("}");
+            }
+            sb.Append("],\"trash\":[");
+            for (int i = 0; i < _trashBin.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                var layer = _trashBin[i];
+                sb.Append("{\"id\":").Append(layer.Id)
+                  .Append(",\"name\":\"").Append(JsonEscape(layer.Name)).Append("\"")
+                  .Append(",\"type\":\"").Append(layer.Type).Append("\"")
+                  .Append(",\"backingLayer\":").Append(layer.BackingLayer)
+                  .Append(",\"trashIndex\":").Append(i)
                   .Append("}");
             }
             sb.Append("]}");
@@ -328,26 +484,39 @@ namespace E2EApi.Features
         private static void OnSaving(ModExtras extras)
         {
             extras.ClearSection(SectionName);
+            extras.ClearSection(SectionName + "_trash");
             if (IsDefault(_current))
             {
                 extras.GeometryFeatureVersion = 0;
                 extras.GeometryHash = null;
-                return;
             }
-            var section = extras.Section(SectionName);
-            section.Add("version=" + FormatVersion);
-            section.Add("selected=" + SelectedVirtualLayerIndex);
-            section.Add("hash=" + CompatibilityHash);
-            section.Add("bounds=" + _current.Width + "," + _current.Height + "," +
-                _current.OriginX + "," + _current.OriginY);
-            foreach (var layer in _current.Layers)
+            else
             {
-                section.Add("layer=" + layer.Id + "|" + layer.Type + "|" +
-                    layer.BackingLayer + "|" + Escape(layer.Name));
+                var section = extras.Section(SectionName);
+                section.Add("version=" + FormatVersion);
+                section.Add("selected=" + SelectedVirtualLayerIndex);
+                section.Add("hash=" + CompatibilityHash);
+                section.Add("bounds=" + _current.Width + "," + _current.Height + "," +
+                    _current.OriginX + "," + _current.OriginY);
+                foreach (var layer in _current.Layers)
+                {
+                    section.Add("layer=" + layer.Id + "|" + layer.Type + "|" +
+                        layer.BackingLayer + "|" + Escape(layer.Name) + "|" +
+                        (layer.Hidden ? "1" : "0"));
+                }
+                extras.RequiresMod = true;
+                extras.GeometryFeatureVersion = FormatVersion;
+                extras.GeometryHash = CompatibilityHash;
             }
-            extras.RequiresMod = true;
-            extras.GeometryFeatureVersion = FormatVersion;
-            extras.GeometryHash = CompatibilityHash;
+            if (_trashBin.Count > 0)
+            {
+                var trashSection = extras.Section(SectionName + "_trash");
+                foreach (var layer in _trashBin)
+                {
+                    trashSection.Add("layer=" + layer.Id + "|" + layer.Type + "|" +
+                        layer.BackingLayer + "|" + Escape(layer.Name));
+                }
+            }
         }
 
         private static void OnLoaded(ModExtras extras)
@@ -361,6 +530,30 @@ namespace E2EApi.Features
             {
                 _loadMismatchWarning =
                     "Map geometry hash mismatch — every multiplayer client needs the same Level.e2e sidecar.";
+            }
+            _trashBin.Clear();
+            var trashSection = extras.Section(SectionName + "_trash");
+            foreach (string raw in trashSection)
+            {
+                if (raw.StartsWith("layer="))
+                {
+                    string[] p = raw.Substring("layer=".Length).Split('|');
+                    if (p.Length >= 4)
+                    {
+                        int id, backing;
+                        VirtualLayerType type;
+                        if (!int.TryParse(p[0], out id)) id = _trashBin.Count;
+                        type = ParseLayerType(p[1]);
+                        if (!int.TryParse(p[2], out backing)) backing = NativeLayerForType(type);
+                        _trashBin.Add(new VirtualLayer
+                        {
+                            Id = id,
+                            Type = type,
+                            BackingLayer = backing,
+                            Name = Unescape(p[3]),
+                        });
+                    }
+                }
             }
             _lastNativeLayer = -1;
             SyncNativeEditorLayer();
@@ -418,6 +611,54 @@ namespace E2EApi.Features
             return x >= 0 && x < NativeWidth && y >= 0 && y < NativeHeight;
         }
 
+        /// <summary>
+        /// Show or hide the game-level backing layer objects to match the Hidden flags.
+        /// A hidden virtual layer's backing native layer is deactivated UNLESS the
+        /// currently selected virtual layer also uses that same backing layer — in that
+        /// case it stays visible so the player can keep editing.
+        /// </summary>
+        public static void ApplyLayerVisibility()
+        {
+            if (!E2EApi.Events.GameEvents.IsEditorActive)
+            {
+                return;
+            }
+            var manager = BaseLevelManager.GetInstance();
+            if (manager == null || manager.m_BuildingLayers == null)
+            {
+                return;
+            }
+
+            int selectedBacking = GetBackingLayer(SelectedVirtualLayerIndex);
+
+            // Determine visibility for each native layer slot:
+            // visible if ANY non-hidden virtual layer uses it, OR if the selected
+            // virtual layer (even if marked hidden) uses it (auto-unhide while editing).
+            var nativeVisible = new bool[NativeLayerCount];
+            for (int i = 0; i < _current.Layers.Count; i++)
+            {
+                var layer = _current.Layers[i];
+                int backing = Clamp(layer.BackingLayer, 0, NativeLayerCount - 1);
+                bool isSelected = (i == SelectedVirtualLayerIndex);
+                if (!layer.Hidden || isSelected)
+                {
+                    nativeVisible[backing] = true;
+                }
+            }
+
+            for (int n = 0; n < NativeLayerCount && n < manager.m_BuildingLayers.Length; n++)
+            {
+                var ld = manager.m_BuildingLayers[n];
+                bool show = nativeVisible[n];
+                if (ld.m_Objects != null) ld.m_Objects.SetActive(show);
+                if (ld.m_Tiles != null) ld.m_Tiles.gameObject.SetActive(show);
+                if (ld.m_Walls != null) ld.m_Walls.SetActive(show);
+                if (ld.m_Decorations != null) ld.m_Decorations.SetActive(show);
+            }
+        }
+
+
+
         private static GeometryState Parse(List<string> lines)
         {
             var state = new GeometryState();
@@ -463,6 +704,7 @@ namespace E2EApi.Features
                             Type = type,
                             BackingLayer = backing,
                             Name = Unescape(p[3]),
+                            Hidden = p.Length >= 5 && p[4] == "1",
                         });
                     }
                 }
@@ -566,7 +808,7 @@ namespace E2EApi.Features
                 case VirtualLayerType.Underground: return "Underground " + index;
                 case VirtualLayerType.Vent: return "Vent " + index;
                 case VirtualLayerType.Roof: return "Roof " + index;
-                default: return "Floor " + index;
+                default: return "Ground " + index;
             }
         }
 

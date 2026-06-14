@@ -514,6 +514,24 @@ namespace MapEditorMod.WebUi
                     body = Encoding.UTF8.GetBytes(MainThread.Run(GetFloorsJson));
                     return 200;
                 }
+                if (path.StartsWith("/api/map/v/"))
+                {
+                    int vi;
+                    if (!int.TryParse(path.Substring("/api/map/v/".Length).Replace(".png", ""), out vi))
+                    {
+                        body = Encoding.UTF8.GetBytes("{\"error\":\"bad virtual layer index\"}");
+                        return 400;
+                    }
+                    byte[] png = MainThread.Run(() => GameMap.GetVirtualLayerPng(vi), 10000);
+                    if (png == null)
+                    {
+                        body = Encoding.UTF8.GetBytes("{\"error\":\"no map texture for virtual layer\"}");
+                        return 404;
+                    }
+                    contentType = "image/png";
+                    body = png;
+                    return 200;
+                }
                 if (path.StartsWith("/api/map/"))
                 {
                     int floor;
@@ -537,7 +555,8 @@ namespace MapEditorMod.WebUi
                     int x = GetInt(query, "x", -1);
                     int y = GetInt(query, "y", -1);
                     int floor = GetInt(query, "floor", -1);
-                    body = Encoding.UTF8.GetBytes(MainThread.Run(() => DoTeleport(x, y, floor)));
+                    int virtualLayer = GetInt(query, "virtualLayer", -1);
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() => DoTeleport(x, y, floor, virtualLayer)));
                     return 200;
                 }
                 if (path == "/api/player")
@@ -561,6 +580,285 @@ namespace MapEditorMod.WebUi
                 {
                     string action = path.Substring("/api/geometry/".Length);
                     body = Encoding.UTF8.GetBytes(MainThread.Run(() => HandleGeometry(action, query)));
+                    return 200;
+                }
+                // /api/layers — cleaner alias for the virtual-layer list (same as /api/geometry)
+                if (path == "/api/layers")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() => MapGeometry.ToJson()));
+                    return 200;
+                }
+                // /api/layers/select?index=<n> — select a virtual layer in the editor
+                if (method == "POST" && path == "/api/layers/select")
+                {
+                    int idx = GetInt(query, "index", 0);
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        if (!E2EApi.Events.GameEvents.IsEditorActive)
+                            return "{\"ok\":false,\"msg\":\"open the level editor first\"}";
+                        MapGeometry.SelectLayer(idx);
+                        return "{\"ok\":true,\"selected\":" + MapGeometry.SelectedVirtualLayerIndex + "}";
+                    }));
+                    return 200;
+                }
+                // /api/debug/floor-registry — dump FloorTypeRegistry
+                if (path == "/api/debug/floor-registry")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        string dump = FloorTypeRegistry.Dump();
+                        return "{\"dump\":" + Quote(dump) + ",\"hasEntries\":" +
+                            (FloorTypeRegistry.HasEntries ? "true" : "false") + "}";
+                    }));
+                    return 200;
+                }
+                // /api/debug/virtual-floors — dump virtual layer list with registry state
+                if (path == "/api/debug/virtual-floors")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        var geom = MapGeometry.Current;
+                        if (geom == null)
+                            return "{\"layers\":[],\"hasEntries\":false}";
+                        var sb = new StringBuilder();
+                        sb.Append("{\"hasEntries\":");
+                        sb.Append(FloorTypeRegistry.HasEntries ? "true" : "false");
+                        sb.Append(",\"layers\":[");
+                        for (int vi = 0; vi < geom.Layers.Count; vi++)
+                        {
+                            var lyr = geom.Layers[vi];
+                            if (vi > 0) sb.Append(",");
+                            sb.Append("{\"index\":").Append(vi)
+                              .Append(",\"name\":").Append(Quote(lyr.Name ?? ""))
+                              .Append(",\"type\":").Append(Quote(lyr.Type.ToString()))
+                              .Append(",\"backingLayer\":").Append(lyr.BackingLayer)
+                              .Append(",\"hidden\":").Append(lyr.Hidden ? "true" : "false")
+                              .Append("}");
+                        }
+                        sb.Append("]}");
+                        return sb.ToString();
+                    }));
+                    return 200;
+                }
+                // /api/map-settings — read/write per-map gameplay settings
+                if (path == "/api/map-settings")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() => MapSettings.ToJson()));
+                    return 200;
+                }
+                if (method == "POST" && path == "/api/map-settings/set")
+                {
+                    string msKey   = Get(query, "key");
+                    string msValue = Get(query, "value");
+                    if (string.IsNullOrEmpty(msKey))
+                    {
+                        body = Encoding.UTF8.GetBytes("{\"ok\":false,\"msg\":\"key required\"}");
+                        return 400;
+                    }
+                    MainThread.Run(() => MapSettings.Set(msKey, msValue));
+                    body = Encoding.UTF8.GetBytes("{\"ok\":true}");
+                    return 200;
+                }
+                if (method == "POST" && path == "/api/map-settings/unset")
+                {
+                    string msKey = Get(query, "key");
+                    MainThread.Run(() => MapSettings.Unset(msKey));
+                    body = Encoding.UTF8.GetBytes("{\"ok\":true}");
+                    return 200;
+                }
+                if (method == "POST" && path == "/api/map-settings/clear")
+                {
+                    MainThread.Run(() => MapSettings.Clear());
+                    body = Encoding.UTF8.GetBytes("{\"ok\":true}");
+                    return 200;
+                }
+
+                // /api/custom-assets/bundles — list bundle filenames in the bundles folder
+                if (path == "/api/custom-assets/bundles")
+                {
+                    string[] names = CustomAssets.ListBundles();
+                    var sb = new StringBuilder("[");
+                    for (int i = 0; i < names.Length; i++)
+                    {
+                        if (i > 0) sb.Append(",");
+                        sb.Append(Quote(names[i]));
+                    }
+                    sb.Append("]");
+                    body = Encoding.UTF8.GetBytes(sb.ToString());
+                    return 200;
+                }
+                // /api/custom-assets/list?bundle=<name> — list asset names in a bundle
+                if (path == "/api/custom-assets/list")
+                {
+                    string bundleName = Get(query, "bundle");
+                    if (bundleName.Length == 0)
+                    {
+                        body = Encoding.UTF8.GetBytes("{\"error\":\"bundle required\"}");
+                        return 400;
+                    }
+                    string[] assets = MainThread.Run(() => CustomAssets.ListAssets(bundleName));
+                    var sb = new StringBuilder("[");
+                    for (int i = 0; i < assets.Length; i++)
+                    {
+                        if (i > 0) sb.Append(",");
+                        sb.Append(Quote(assets[i]));
+                    }
+                    sb.Append("]");
+                    body = Encoding.UTF8.GetBytes(sb.ToString());
+                    return 200;
+                }
+                // /api/custom-assets/place?bundle=<n>&asset=<n>&x=<>&y=<>&layer=<>
+                if (method == "POST" && path == "/api/custom-assets/place")
+                {
+                    string bundleName = Get(query, "bundle");
+                    string assetName  = Get(query, "asset");
+                    int caX     = GetInt(query, "x", -1);
+                    int caY     = GetInt(query, "y", -1);
+                    int caLayer = GetInt(query, "layer", -1);
+                    float offX  = GetFloat(query, "offX", 0f);
+                    float offY2 = GetFloat(query, "offY", 0f);
+                    float offZ  = GetFloat(query, "offZ", 0f);
+                    float rotY  = GetFloat(query, "rotY", 0f);
+                    if (bundleName.Length == 0 || assetName.Length == 0 ||
+                        caX < 0 || caY < 0 || caLayer < 0)
+                    {
+                        body = Encoding.UTF8.GetBytes(
+                            "{\"ok\":false,\"msg\":\"bundle, asset, x, y and layer required\"}");
+                        return 400;
+                    }
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        CustomAssetPlacements.Place(bundleName, assetName,
+                            caX, caY, caLayer, offX, offY2, offZ, rotY);
+                        return "{\"ok\":true,\"count\":" +
+                            CustomAssetPlacements.Count + "}";
+                    }));
+                    return 200;
+                }
+                // /api/custom-assets/place-cursor?bundle=<n>&asset=<n> — place at editor cursor
+                if (method == "POST" && path == "/api/custom-assets/place-cursor")
+                {
+                    string bundleName = Get(query, "bundle");
+                    string assetName  = Get(query, "asset");
+                    float offX  = GetFloat(query, "offX", 0f);
+                    float offY2 = GetFloat(query, "offY", 0f);
+                    float offZ  = GetFloat(query, "offZ", 0f);
+                    float rotY  = GetFloat(query, "rotY", 0f);
+                    if (bundleName.Length == 0 || assetName.Length == 0)
+                    {
+                        body = Encoding.UTF8.GetBytes(
+                            "{\"ok\":false,\"msg\":\"bundle and asset required\"}");
+                        return 400;
+                    }
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        int cx, cy;
+                        if (!Placement.GetCursorTile(out cx, out cy))
+                            return "{\"ok\":false,\"msg\":\"cursor not on the map\"}";
+                        int layer = Grid.CurrentEditorLayer;
+                        if (layer < 0) layer = 0;
+                        CustomAssetPlacements.Place(bundleName, assetName,
+                            cx, cy, layer, offX, offY2, offZ, rotY);
+                        return "{\"ok\":true,\"x\":" + cx + ",\"y\":" + cy +
+                            ",\"layer\":" + layer +
+                            ",\"count\":" + CustomAssetPlacements.Count + "}";
+                    }));
+                    return 200;
+                }
+                // /api/custom-assets/erase?x=<>&y=<>&layer=<>
+                if (method == "POST" && path == "/api/custom-assets/erase")
+                {
+                    int caX     = GetInt(query, "x", -1);
+                    int caY     = GetInt(query, "y", -1);
+                    int caLayer = GetInt(query, "layer", -1);
+                    if (caX < 0 || caY < 0 || caLayer < 0)
+                    {
+                        body = Encoding.UTF8.GetBytes(
+                            "{\"ok\":false,\"msg\":\"x, y and layer required\"}");
+                        return 400;
+                    }
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        int removed = CustomAssetPlacements.EraseAt(caX, caY, caLayer);
+                        return "{\"ok\":true,\"removed\":" + removed +
+                            ",\"count\":" + CustomAssetPlacements.Count + "}";
+                    }));
+                    return 200;
+                }
+                // /api/custom-assets/erase-cursor — erase at editor cursor
+                if (method == "POST" && path == "/api/custom-assets/erase-cursor")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        int cx, cy;
+                        if (!Placement.GetCursorTile(out cx, out cy))
+                            return "{\"ok\":false,\"msg\":\"cursor not on the map\"}";
+                        int layer = Grid.CurrentEditorLayer;
+                        if (layer < 0) layer = 0;
+                        int removed = CustomAssetPlacements.EraseAt(cx, cy, layer);
+                        return "{\"ok\":true,\"removed\":" + removed +
+                            ",\"count\":" + CustomAssetPlacements.Count + "}";
+                    }));
+                    return 200;
+                }
+                // /api/custom-assets/clear
+                if (method == "POST" && path == "/api/custom-assets/clear")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        CustomAssetPlacements.Clear();
+                        return "{\"ok\":true}";
+                    }));
+                    return 200;
+                }
+                // /api/custom-assets — list all placed custom assets
+                if (path == "/api/custom-assets")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        var sb = new StringBuilder("[");
+                        bool first = true;
+                        foreach (var p in CustomAssetPlacements.All())
+                        {
+                            if (!first) sb.Append(",");
+                            first = false;
+                            sb.Append("{\"bundle\":").Append(Quote(p.BundleName))
+                              .Append(",\"asset\":").Append(Quote(p.AssetName))
+                              .Append(",\"x\":").Append(p.X)
+                              .Append(",\"y\":").Append(p.Y)
+                              .Append(",\"layer\":").Append(p.Layer)
+                              .Append("}");
+                        }
+                        sb.Append("]");
+                        return sb.ToString();
+                    }));
+                    return 200;
+                }
+                // /api/multiplayer — current multiplayer / Photon room state
+                if (path == "/api/multiplayer")
+                {
+                    body = Encoding.UTF8.GetBytes(
+                        MainThread.Run(() => E2EApi.Features.MultiplayerGate.ToJson()));
+                    return 200;
+                }
+                // /api/multiplayer/announce — host broadcasts mod-required to the room
+                if (method == "POST" && path == "/api/multiplayer/announce")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        bool ok = E2EApi.Features.MultiplayerGate.AnnounceRequiresMod();
+                        return "{\"ok\":" + (ok ? "true" : "false") + "}";
+                    }));
+                    return 200;
+                }
+                // /api/multiplayer/refresh — re-read room properties
+                if (method == "POST" && path == "/api/multiplayer/refresh")
+                {
+                    body = Encoding.UTF8.GetBytes(MainThread.Run(() =>
+                    {
+                        E2EApi.Features.MultiplayerGate.RefreshRoomState();
+                        return E2EApi.Features.MultiplayerGate.ToJson();
+                    }));
                     return 200;
                 }
                 body = Encoding.UTF8.GetBytes("{\"error\":\"not found\"}");
@@ -597,6 +895,7 @@ namespace MapEditorMod.WebUi
             sb.Append(",\"triggers\":").Append(Triggers.All.Count);
             sb.Append(",\"modTiles\":").Append(ModTiles.Count);
             sb.Append(",\"animatedTiles\":").Append(AnimatedModTiles.Count);
+            sb.Append(",\"customAssets\":").Append(CustomAssetPlacements.Count);
             sb.Append(",\"editorLayer\":").Append(Grid.CurrentEditorLayer);
             sb.Append(",\"nativeEditorLayer\":").Append(Grid.CurrentNativeEditorLayer);
             sb.Append(",\"geometryFeatureVersion\":").Append(ModExtras.Current.GeometryFeatureVersion);
@@ -1291,8 +1590,8 @@ namespace MapEditorMod.WebUi
             {
                 return "{\"present\":false}";
             }
-            int x, y, floor;
-            bool hasTile = player.GetTile(out x, out y, out floor);
+            int x, y, floor, virtualLayer;
+            bool hasTile = player.GetTile(out x, out y, out floor, out virtualLayer);
             var sb = new StringBuilder();
             sb.Append("{\"present\":true");
             sb.Append(",\"name\":").Append(Quote(player.Name ?? ""));
@@ -1310,7 +1609,9 @@ namespace MapEditorMod.WebUi
             if (hasTile)
             {
                 sb.Append("{\"x\":").Append(x).Append(",\"y\":").Append(y)
-                  .Append(",\"floor\":").Append(floor).Append("}");
+                  .Append(",\"floor\":").Append(floor)
+                  .Append(",\"virtualLayer\":").Append(virtualLayer)
+                  .Append("}");
             }
             else
             {
@@ -1320,17 +1621,20 @@ namespace MapEditorMod.WebUi
             return sb.ToString();
         }
 
-        private static string DoTeleport(int x, int y, int floor)
+        private static string DoTeleport(int x, int y, int floor, int virtualLayer = -1)
         {
             var player = E2EApi.Players.Player.GetLocal();
             if (player == null || !player.IsValid)
             {
                 return "{\"ok\":false,\"msg\":\"no player pawn (start the map first)\"}";
             }
-            bool ok = player.TeleportToTile(x, y, floor);
-            return ok
-                ? "{\"ok\":true,\"msg\":\"teleported to (" + x + "," + y + ") floor " + floor + "\"}"
-                : "{\"ok\":false,\"msg\":\"teleport failed (bad tile/floor?)\"}";
+            bool ok = player.TeleportToTile(x, y, floor, virtualLayer);
+            if (!ok)
+                return "{\"ok\":false,\"msg\":\"teleport failed (bad tile/floor?)\"}";
+            string dest = virtualLayer >= 0
+                ? "(" + x + "," + y + ") virtual layer " + virtualLayer
+                : "(" + x + "," + y + ") floor " + floor;
+            return "{\"ok\":true,\"msg\":\"teleported to " + dest + "\"}";
         }
 
         private static string RunCheat(string name, string value)
@@ -1402,6 +1706,14 @@ namespace MapEditorMod.WebUi
                         break;
                     case "reset":
                         MapGeometry.ResetDefault();
+                        break;
+                    case "hide":
+                        MapGeometry.SetLayerHidden(
+                            GetInt(query, "index", MapGeometry.SelectedVirtualLayerIndex),
+                            GetBool(query, "hidden", true));
+                        break;
+                    case "restore":
+                        MapGeometry.RestoreFromTrash(GetInt(query, "trashIndex", 0));
                         break;
                     default:
                         return "{\"ok\":false,\"msg\":\"unknown geometry action\"}";
@@ -1514,10 +1826,32 @@ namespace MapEditorMod.WebUi
             return v == "true" || v == "1" || v == "yes" || v == "on";
         }
 
+        private static bool GetBool(Dictionary<string, string> query, string key, bool fallback)
+        {
+            string v = Get(query, key);
+            if (string.IsNullOrEmpty(v))
+            {
+                return fallback;
+            }
+            v = v.ToLowerInvariant();
+            if (v == "false" || v == "0" || v == "no" || v == "off") return false;
+            if (v == "true" || v == "1" || v == "yes" || v == "on") return true;
+            return fallback;
+        }
+
         private static int GetInt(Dictionary<string, string> query, string key, int fallback)
         {
             int value;
             return int.TryParse(Get(query, key), out value) ? value : fallback;
+        }
+
+        private static float GetFloat(Dictionary<string, string> query, string key, float fallback)
+        {
+            float value;
+            return float.TryParse(Get(query, key),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out value) ? value : fallback;
         }
 
         private static string Quote(string value)

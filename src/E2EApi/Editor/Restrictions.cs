@@ -47,6 +47,35 @@ namespace E2EApi.Editor
                 }
             }
 
+            // allow placement even when an object/room on the floor above blocks the position
+            // LevelEditorBrushController.AreWeValid() is the gate that CanBlockBePlaced() checks
+            [HarmonyPatch(typeof(LevelEditorBrushController), nameof(LevelEditorBrushController.AreWeValid))]
+            [HarmonyPostfix]
+            private static void BrushAlwaysValid(ref bool __result)
+            {
+                if (_ignoreAll)
+                {
+                    __result = true;
+                }
+            }
+
+            // set the native m_IgnoreChecks flag so the brush preview (LevelEditorBrushElement.UpdateLook)
+            // also skips cross-floor property checks — eliminates the red "blocked above" highlight
+            [HarmonyPatch(typeof(LevelEditorBrushElement), "UpdateLook")]
+            [HarmonyPrefix]
+            private static void BypassBrushElementChecks()
+            {
+                if (!_ignoreAll)
+                {
+                    return;
+                }
+                var mgr = BuildingInstructionManager.GetInstance();
+                if (mgr != null)
+                {
+                    mgr.m_IgnoreChecks = true;
+                }
+            }
+
             // level validation: report "no problems" so saving produces a
             // Finished version (which also enables uploading and playing)
             [HarmonyPatch(typeof(LevelDetailsManager), nameof(LevelDetailsManager.GetLevelDataValidationErrors))]
