@@ -80,6 +80,7 @@ namespace E2EApi.Features
             int backing = MapGeometry.GetBackingLayer(virtualIndex);
             return GetFloorPng(backing);
         }
+        private static byte[] EncodeUnreadable(Texture2D texture)
         {
             var rt = RenderTexture.GetTemporary(texture.width, texture.height, 0,
                 RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
