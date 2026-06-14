@@ -122,6 +122,7 @@ namespace E2EApi.Features
             Editor.Patches.FloorNavigationPatchGroup.EnsurePatched();
             Editor.Patches.StairsPatchGroup.EnsurePatched();
             Editor.Patches.FloorZLookupPatchGroup.EnsurePatched();
+            Editor.Patches.CharacterFloorPatchGroup.EnsurePatched();
             VirtualLayerListUi.Initialise();
             Editor.Patches.MapExpansionPatchRegistrar.EnsurePatched();
         }
