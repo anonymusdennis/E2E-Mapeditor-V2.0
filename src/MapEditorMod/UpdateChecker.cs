@@ -175,7 +175,13 @@ namespace MapEditorMod
                 Plugin.Log.LogWarning("Update check: no tag_name in the release info.");
                 return;
             }
-            OnVersionReceived(tagName, htmlUrl ?? (RepoUrl + "/releases/latest"));
+            // Only ever open URLs that point at this repository, so a tampered
+            // response cannot send the user's browser anywhere else.
+            if (htmlUrl == null || !htmlUrl.StartsWith(RepoUrl + "/", StringComparison.Ordinal))
+            {
+                htmlUrl = RepoUrl + "/releases/latest";
+            }
+            OnVersionReceived(tagName, htmlUrl);
         }
 
         /// <summary>Extract the first string value of a JSON key (no full parser needed).</summary>
