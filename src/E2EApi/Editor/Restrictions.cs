@@ -222,7 +222,11 @@ namespace E2EApi.Editor
                             continue; // the vanilla pass already placed it
                         }
                         // neighbour ring: vanilla checks the surrounding cells
-                        // too on vent layers (same bounds quirks as the game)
+                        // too on vent layers. The "i < 117" bound is NOT a
+                        // typo — it replicates the exact bound the game uses
+                        // (EditorLevelEditorManager.AddArea), quirks and all,
+                        // because this pass must accept precisely the set of
+                        // placements the editor accepted.
                         cells[0] = index;
                         if (vent)
                         {
