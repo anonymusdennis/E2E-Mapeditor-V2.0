@@ -7,6 +7,44 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- **Full multi-floor support**: any combination and number of floors now works
+  in both the editor and play mode. The selected floor is shown in isolation
+  by default; new *Show floor below* / *Show floor above* checkboxes (quick
+  panel + config) blend in the neighbouring floors, or disable *Only show
+  selected floor* for the vanilla everything-below view.
+- **Floor picker scrollbar**: the custom floor selection list gains a
+  scrollbar and adapts its height when a map has many floors; the Configure
+  Map Layers window's layer list scrolls as well.
+- **Teleport triggers**: a new *Teleport link / stairs* editor tool links a
+  source tile (e.g. a staircase) to a destination tile on any virtual floor.
+  Players stepping on the source in play mode are teleported — including
+  across extra map layers. Trigger data persists in `Level.e2e`.
+- **Undo/redo everywhere**: Ctrl+Z undoes and Ctrl+Y (or Ctrl+Shift+Z) redoes
+  both vanilla edits and every mod tool (custom tiles, animated tiles,
+  connected textures, electric fences, trigger links). Drag gestures count as
+  a single step. Quick panel gains Undo/Redo buttons.
+- **Alt tool wheel**: hold Alt in the editor for a radial menu navigated with
+  the mouse cursor or mouse wheel; release Alt to apply. Includes undo/redo,
+  CTM brush collision/damage/auto-connect/color toggles, convert-to-normal
+  brush, clear brush, floor isolation, X-ray and overlay toggles.
+- **CTM brush collision**: connected texture brushes marked *Collision* now
+  block players in play mode (positions are restored when standing on a
+  blocked tile), persisted per map.
+- **Connected texture persistence**: painted CTM cells and their stamp
+  definitions are stored in `Level.e2e`, so connectivity, colors and locks
+  survive save/reload.
+
+### Fixed
+- **More than six floors broke the editor and game**: floor visibility,
+  layer syncing and teleport routing are now fully virtual-layer aware.
+- **CTM variant weights**: weights can now be set to 0% (OFF) to disable a
+  variant; weight rolls skip disabled variants instead of misbehaving. The
+  brush window shows eight weight rows (up from four) plus an *off* button
+  and an *Erase ALL painted tiles of this brush* action (single undo step).
+- **CTM manual mode**: switching a brush from auto to manual now normalizes
+  an unset subtile mask to "fully connected" instead of painting nothing.
+
 ---
 
 ## [2.5.0]

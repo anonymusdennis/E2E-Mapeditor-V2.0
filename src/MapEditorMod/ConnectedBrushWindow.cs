@@ -62,7 +62,7 @@ namespace MapEditorMod
                 return;
             }
 
-            _window = ModWindow.Create("Connected Texture Brush", 470f, 560f);
+            _window = ModWindow.Create("Connected Texture Brush", 470f, 700f);
             var list = UiFactory.VerticalList(_window.Content, 24f, 4f);
 
             _summary = UiFactory.Label(list, "", 12);
@@ -93,6 +93,10 @@ namespace MapEditorMod
             var auto = UiFactory.Button(list, "Return to auto-connected mode", () =>
                 EditorTools.SetConnectedAuto(true));
             UiFactory.FixHeight(auto, 24f);
+            var eraseAll = UiFactory.Button(list, "Erase ALL painted tiles of this brush", () =>
+                EditorTools.EraseAllOfCurrentConnected());
+            eraseAll.GetComponentInChildren<Text>().color = new Color(1f, 0.6f, 0.5f, 1f);
+            UiFactory.FixHeight(eraseAll, 24f);
             var clear = UiFactory.Button(list, "Clear brush (Escape)", () =>
                 EditorTools.ClearBrush());
             UiFactory.FixHeight(clear, 24f);
@@ -157,7 +161,7 @@ namespace MapEditorMod
             UiFactory.FixHeight(title, 22f);
             _variantLabel = title;
 
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < 8; i++)
             {
                 int captured = i;
                 var row = new GameObject("Variant" + i);
@@ -171,8 +175,10 @@ namespace MapEditorMod
 
                 var text = UiFactory.Label(row.transform, "", 11);
                 _variantLabels.Add(text);
+                var off = UiFactory.Button(row.transform, "off", () => SetVariant(captured, 0));
                 var down = UiFactory.Button(row.transform, "-10", () => AdjustVariant(captured, -10));
                 var up = UiFactory.Button(row.transform, "+10", () => AdjustVariant(captured, 10));
+                UiFactory.FixHeight(off, 24f);
                 UiFactory.FixHeight(down, 24f);
                 UiFactory.FixHeight(up, 24f);
             }
@@ -199,6 +205,22 @@ namespace MapEditorMod
             }
             EditorTools.SetConnectedVariantWeight(_selectedMask, index,
                 variants[index].Weight + delta);
+        }
+
+        private void SetVariant(int index, int weight)
+        {
+            var stamp = EditorTools.ConnectedStamp;
+            if (stamp == null)
+            {
+                return;
+            }
+            List<ConnectedVariant> variants;
+            if (!stamp.Variants.TryGetValue(_selectedMask, out variants) ||
+                index < 0 || index >= variants.Count)
+            {
+                return;
+            }
+            EditorTools.SetConnectedVariantWeight(_selectedMask, index, weight);
         }
 
         private void Refresh()
@@ -253,7 +275,7 @@ namespace MapEditorMod
                 {
                     var v = variants[i];
                     _variantLabels[i].text = "Variant " + (i + 1) + ": " +
-                        v.Weight + "% " + v.W + "x" + v.H;
+                        (v.Weight <= 0 ? "OFF" : v.Weight + "%") + " " + v.W + "x" + v.H;
                 }
                 else
                 {

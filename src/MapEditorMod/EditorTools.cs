@@ -974,6 +974,106 @@ namespace MapEditorMod
                 });
         }
 
+        private static bool TryParseConnectedKey(string key,
+            out int x, out int y, out int layer)
+        {
+            x = y = layer = 0;
+            var parts = key.Split(':');
+            return parts.Length == 3 &&
+                int.TryParse(parts[0], out layer) &&
+                int.TryParse(parts[1], out x) &&
+                int.TryParse(parts[2], out y);
+        }
+
+        private static void SnapshotInto(int x, int y, int layer,
+            Dictionary<string, ConnectedTileSnapshot> map)
+        {
+            string key = ConnectedKey(x, y, layer);
+            if (!map.ContainsKey(key))
+            {
+                map[key] = CaptureConnectedTile(x, y, layer);
+            }
+        }
+
+        /// <summary>
+        /// Remove every painted cell of the currently armed CTM brush from the
+        /// whole map (single undo step). Returns the number of cells removed.
+        /// </summary>
+        public static int EraseAllOfCurrentConnected()
+        {
+            var stamp = ConnectedStamp;
+            if (stamp == null)
+            {
+                return 0;
+            }
+            var coords = new List<int>();
+            foreach (var pair in ConnectedCells)
+            {
+                if (pair.Value.Stamp != stamp)
+                {
+                    continue;
+                }
+                int x, y, layer;
+                if (TryParseConnectedKey(pair.Key, out x, out y, out layer))
+                {
+                    coords.Add(x);
+                    coords.Add(y);
+                    coords.Add(layer);
+                }
+            }
+            if (coords.Count == 0)
+            {
+                return 0;
+            }
+
+            var beforeMap = new Dictionary<string, ConnectedTileSnapshot>();
+            for (int i = 0; i < coords.Count; i += 3)
+            {
+                int x = coords[i], y = coords[i + 1], layer = coords[i + 2];
+                SnapshotInto(x, y, layer, beforeMap);
+                SnapshotInto(x + 1, y, layer, beforeMap);
+                SnapshotInto(x - 1, y, layer, beforeMap);
+                SnapshotInto(x, y + 1, layer, beforeMap);
+                SnapshotInto(x, y - 1, layer, beforeMap);
+            }
+
+            for (int i = 0; i < coords.Count; i += 3)
+            {
+                int x = coords[i], y = coords[i + 1], layer = coords[i + 2];
+                ConnectedCells.Remove(ConnectedKey(x, y, layer));
+                ModTiles.TakeAnchored(x, y, layer, stamp.Decor);
+                if (stamp.Damaging)
+                {
+                    ElectricFences.SetElectrified(x, y, false);
+                }
+                ModCollision.SetBlocked(x, y, layer, false);
+            }
+            foreach (var pair in beforeMap)
+            {
+                var s = pair.Value;
+                ResolveConnectedAt(s.X, s.Y, s.Layer);
+            }
+
+            var after = new List<ConnectedTileSnapshot>();
+            var beforeList = new List<ConnectedTileSnapshot>();
+            foreach (var pair in beforeMap)
+            {
+                beforeList.Add(pair.Value);
+                after.Add(CaptureConnectedTile(pair.Value.X, pair.Value.Y, pair.Value.Layer));
+            }
+            UndoHistory.Push("erase all " + (string.IsNullOrEmpty(stamp.Name) ? "CTM" : stamp.Name),
+                () =>
+                {
+                    foreach (var s in beforeList) ApplyConnectedTileSnapshot(s);
+                },
+                () =>
+                {
+                    foreach (var s in after) ApplyConnectedTileSnapshot(s);
+                });
+            OnChanged();
+            return coords.Count / 3;
+        }
+
         private static bool ConnectsTo(int x, int y, int layer, ConnectedCell me)
         {
             ConnectedCell other;
