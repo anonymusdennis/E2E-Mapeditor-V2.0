@@ -53,7 +53,19 @@ namespace E2EApi.Editor
             {
                 return false;
             }
-            mgr.AddDeleteToDeleteList(x, y, type);
+            int index = mgr.AddDeleteToDeleteList(x, y, type);
+            if (index == -1)
+            {
+                return false;
+            }
+            // recording alone does nothing — append the instruction to the
+            // user list and run it so the delete happens now and on replay
+            mgr.AddToCurrentList(index, BaseBuildInstruction.InstructionTypeEnum.Delete);
+            mgr.RunInstruction(-1, bStorePrevious: true);
+            if (mgr.m_LevelManager != null)
+            {
+                mgr.m_LevelManager.UpdateTiles();
+            }
             return true;
         }
 

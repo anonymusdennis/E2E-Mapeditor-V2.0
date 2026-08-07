@@ -61,6 +61,7 @@ namespace MapEditorMod
             ApplyConfig();
 
             // sidecar-backed features must hook save/load before any map loads
+            E2EApi.Editor.Restrictions.Initialise();
             E2EApi.Features.ElectricFences.Initialise();
             E2EApi.Features.Triggers.Initialise();
             E2EApi.Features.ModTiles.Initialise();
@@ -391,6 +392,6 @@ namespace MapEditorMod
     {
         public const string Guid = "org.anonymusdennis.e2e.mapeditor";
         public const string Name = "E2E Map Editor";
-        public const string Version = "2.1.1";
+        public const string Version = "2.5.0";
     }
 }

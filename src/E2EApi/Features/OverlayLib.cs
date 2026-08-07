@@ -76,6 +76,113 @@ namespace E2EApi.Features
             _litSearchAttempted = false;
         }
 
+        // ---- play-mode ambient lighting ----
+        //
+        // The game dims its map by pushing _AmbientLight/_AmbientIntensity
+        // material property blocks onto registered MeshRenderers
+        // (CullingObjectCollector.UpdateLightingPropertyBlocks). Our overlay
+        // SpriteRenderers are never registered there, so without help they
+        // render full-bright all night. Approximate the vanilla result by
+        // tinting the sprite colour with the current ambient light instead.
+
+        private static int _ambientFrame = -1;
+        private static Color _ambientOutside = Color.white;
+        private static Color _ambientInside = Color.white;
+        private static Color _ambientUnderground = Color.white;
+
+        private static Color CombineAmbient(Color colour, float intensity)
+        {
+            // sprite vertex colours clamp at 1, which conveniently means full
+            // daylight (intensity >= 1) keeps the sprite's own colours intact
+            return new Color(
+                Mathf.Clamp01(colour.r * intensity),
+                Mathf.Clamp01(colour.g * intensity),
+                Mathf.Clamp01(colour.b * intensity),
+                1f);
+        }
+
+        private static void RefreshAmbientCache()
+        {
+            if (_ambientFrame == Time.frameCount)
+            {
+                return;
+            }
+            _ambientFrame = Time.frameCount;
+            _ambientOutside = _ambientInside = _ambientUnderground = Color.white;
+            var lighting = LightingManager.GetInstance();
+            if (lighting == null)
+            {
+                return;
+            }
+            try
+            {
+                _ambientOutside = CombineAmbient(
+                    lighting.GetCurrentAmbientColor(inside: false),
+                    lighting.GetCurrentAmbientIntensity(inside: false));
+                _ambientInside = CombineAmbient(
+                    lighting.GetCurrentAmbientColor(inside: true),
+                    lighting.GetCurrentAmbientIntensity(inside: true));
+                _ambientUnderground = CombineAmbient(
+                    lighting.GetUnderGroundAmbientLightColour(),
+                    lighting.GetUnderGroundAmbientLightIntensity());
+            }
+            catch (System.Exception)
+            {
+                _ambientOutside = _ambientInside = _ambientUnderground = Color.white;
+            }
+        }
+
+        /// <summary>
+        /// Ambient light tint for a tile in play mode, matching the vanilla
+        /// day/night map dimming: underground uses the underground ambient,
+        /// vent layers the indoor ambient, and everything else picks indoor or
+        /// outdoor from the tile's environment property. Returns white in the
+        /// editor or when no lighting manager exists.
+        /// </summary>
+        public static Color PlayModeAmbient(int x, int y, int virtualLayer)
+        {
+            RefreshAmbientCache();
+            int nativeLayer = MapGeometry.GetBackingLayer(virtualLayer);
+            if (nativeLayer == 0)
+            {
+                return _ambientUnderground;
+            }
+            var level = BaseLevelManager.GetInstance();
+            if (level == null || level.m_BuildingLayers == null ||
+                nativeLayer < 0 || nativeLayer >= level.m_BuildingLayers.Length)
+            {
+                return _ambientOutside;
+            }
+            if (level.m_VentLayers != null && nativeLayer < level.m_VentLayers.Length &&
+                level.m_VentLayers[nativeLayer])
+            {
+                return _ambientInside;
+            }
+            bool inside = false;
+            if (MapGeometry.IsWithinNativeBounds(x, y))
+            {
+                // play mode stores upper floors shifted down: props row = y + offset
+                int row = y;
+                var game = level as GameLevelEditorManager;
+                if (game != null && game.m_LayerOffset != null &&
+                    nativeLayer < game.m_LayerOffset.Length)
+                {
+                    row += game.m_LayerOffset[nativeLayer];
+                }
+                if (row >= 0 && row < 120)
+                {
+                    var props = level.m_BuildingLayers[nativeLayer].m_TileProperties;
+                    int index = row * 120 + x;
+                    if (props != null && index < props.Length)
+                    {
+                        inside = (props[index] & BaseLevelManager.TileProperty.EnvironmentMask)
+                            == BaseLevelManager.TileProperty.EnvironmentMask;
+                    }
+                }
+            }
+            return inside ? _ambientInside : _ambientOutside;
+        }
+
         /// <summary>8×8 yellow/transparent checker, point-filtered.</summary>
         public static Texture2D CheckerTexture
         {

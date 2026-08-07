@@ -9,6 +9,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [2.5.0]
+
+### Fixed
+- **Custom-tile night lighting** (Issue #16, "modded blocks are 100× brighter
+  at night"): custom tile and animated tile stamps now tint with the game's
+  current ambient light in play mode — indoor/outdoor from the tile's
+  environment, underground and vent layers use their own ambient — so they
+  darken at night like the vanilla map. Editor rendering is unchanged.
+- **Unchecked placements dropped at play/reload** (Issues #18 and #3, "stairs
+  just broke" / tiles move or disappear): maps built with *Ignore all
+  restrictions* now save an `uncheckedPlacements` flag in `Level.e2e`.
+  Flagged maps replay their instruction log with the vanilla support checks
+  bypassed in the editor, and play mode re-places tiles/walls the vanilla
+  loader silently dropped (only where the editor itself would allow them:
+  rooms, occupancy, caps and no-blocking rules still apply).
+- **Vent walls undeletable outside vent floors** (Issue #21): the eraser now
+  deletes automatic (vent) walls on non-vent layers instead of silently
+  skipping them. Vanilla maps are unaffected (vanilla never places automatic
+  walls there).
+- **Ignore-all toggle leaked native check bypass**: turning the toggle off now
+  also resets the game's internal `m_IgnoreChecks` flag (it previously stayed
+  on until the game restarted).
+- **Update prompt never appeared** (Discord reports): the update checker now
+  uses Unity's native `WWW` transport. The game's .NET 3.5 Mono runtime has no
+  TLS 1.2, so the old `HttpWebRequest` could never reach GitHub's API and the
+  check always failed silently. The threaded request remains as a fallback.
+- **`Placement.Delete` API did nothing**: web-UI/API deletes only recorded the
+  instruction without running it; they now execute immediately and persist.
+
+---
+
 ## [2.1.1] — 2026-06-14
 
 ### Added

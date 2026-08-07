@@ -20,6 +20,17 @@ namespace E2EApi.Features
         private const int DecorSortingOrder = 22000;
 
         private static readonly List<GameObject> Markers = new List<GameObject>();
+
+        private struct TintEntry
+        {
+            public SpriteRenderer Renderer;
+            public int X;
+            public int Y;
+            public int Layer;
+        }
+
+        // play-mode ambient tint targets (one per marker), rebuilt with Markers
+        private static readonly List<TintEntry> TintEntries = new List<TintEntry>();
         private static int _builtVersion = -1;
         private static int _builtGeometryVersion = -1;
         private static BaseLevelManager _builtFor;
@@ -45,6 +56,7 @@ namespace E2EApi.Features
                 _builtLayer == editorLayer &&
                 _builtGeometryVersion == MapGeometry.Version)
             {
+                ApplyAmbient(editorLayer);
                 return;
             }
             bool allResolved = Rebuild(editorLayer);
@@ -58,6 +70,27 @@ namespace E2EApi.Features
                 _builtGeometryVersion = MapGeometry.Version;
                 _builtFor = level;
                 _builtLayer = editorLayer;
+            }
+            ApplyAmbient(editorLayer);
+        }
+
+        /// <summary>
+        /// In play mode, tint each stamp with the game's current ambient light
+        /// so custom tiles darken at night like the vanilla map (issue #16).
+        /// </summary>
+        private static void ApplyAmbient(int editorLayer)
+        {
+            if (editorLayer >= 0)
+            {
+                return; // editor view keeps its own white/dimmed colours
+            }
+            foreach (var entry in TintEntries)
+            {
+                if (entry.Renderer != null)
+                {
+                    entry.Renderer.color =
+                        OverlayLib.PlayModeAmbient(entry.X, entry.Y, entry.Layer);
+                }
             }
         }
 
@@ -137,6 +170,13 @@ namespace E2EApi.Features
                     go.transform.position = bottomLeft;
                     Markers.Add(go);
                 }
+                TintEntries.Add(new TintEntry
+                {
+                    Renderer = renderer,
+                    X = p.X,
+                    Y = p.Y,
+                    Layer = p.Layer,
+                });
             }
             return allResolved;
         }
@@ -183,6 +223,7 @@ namespace E2EApi.Features
                 }
             }
             Markers.Clear();
+            TintEntries.Clear();
         }
     }
 }

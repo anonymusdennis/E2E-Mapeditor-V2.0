@@ -30,6 +30,9 @@ namespace E2EApi.Features
             public float Fps;
             public bool Loop;
             public bool PingPong;
+            public int X;                   // tile coords for play-mode ambient tint
+            public int Y;
+            public int Layer;
 
             private float _nextFrameAt;
             private int _frameIndex;
@@ -118,9 +121,17 @@ namespace E2EApi.Features
                 }
             }
 
-            // advance animation frames each frame
+            // advance animation frames each frame; in play mode also tint with
+            // the current ambient light so stamps darken at night (issue #16)
+            bool play = editorLayer < 0;
             foreach (var e in Entries)
+            {
                 e.Tick();
+                if (play && e.Renderer != null)
+                {
+                    e.Renderer.color = OverlayLib.PlayModeAmbient(e.X, e.Y, e.Layer);
+                }
+            }
         }
 
         /// <summary>
@@ -187,6 +198,9 @@ namespace E2EApi.Features
                     Fps = p.Fps,
                     Loop = p.Loop,
                     PingPong = p.PingPong,
+                    X = p.X,
+                    Y = p.Y,
+                    Layer = p.Layer,
                 };
 
                 if (Mathf.Abs(p.Rotation) > RotationEpsilon)
