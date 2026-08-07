@@ -80,7 +80,8 @@ namespace E2EApi.Persistence
         private static long _lastSidecarWriteTicks = long.MinValue;
         private static bool _lastSidecarExists;
 
-        internal static void EnsurePatched()
+        /// <summary>Install the save/load Harmony patches (idempotent).</summary>
+        public static void EnsurePatched()
         {
             PatchRegistry.EnsurePatched(typeof(SaveLoadPatches));
             if (!_editorHooked)

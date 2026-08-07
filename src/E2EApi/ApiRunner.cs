@@ -49,6 +49,8 @@ namespace E2EApi
             MainThread.Drain();
             Editor.Limits.Enforce();
             Features.ElectricFences.Tick();
+            Features.Triggers.Tick();
+            Features.ModCollision.Tick();
             Features.FenceOverlay.Tick();
             Features.XRay.Tick();
             Features.TriggerArrows.Tick();

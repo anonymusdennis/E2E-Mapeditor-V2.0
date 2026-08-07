@@ -18,6 +18,7 @@ namespace MapEditorMod
         PaintAnimatedTile,
         EraseAnimatedTile,
         PaintConnectedTile,
+        LinkTeleport,
     }
 
     /// <summary>The atlas region currently armed for tile painting.</summary>
@@ -117,6 +118,9 @@ namespace MapEditorMod
         public static int SwitchX { get; private set; } = -1;
         public static int SwitchY { get; private set; } = -1;
 
+        /// <summary>Virtual layer of the pending teleport source (-1 = none).</summary>
+        public static int SwitchLayer { get; private set; } = -1;
+
         /// <summary>Raised whenever the mode or pending switch changes (main thread).</summary>
         public static event Action Changed;
 
@@ -135,10 +139,89 @@ namespace MapEditorMod
         private static readonly Dictionary<string, ConnectedCell> ConnectedCells =
             new Dictionary<string, ConnectedCell>();
 
+        /// <summary>
+        /// Painted CTM cells keyed "layer:x:y" — exposed for map persistence
+        /// (same assembly only).
+        /// </summary>
+        internal static Dictionary<string, ConnectedCell> ConnectedCellMap
+            => ConnectedCells;
+
+        /// <summary>Clear all painted CTM cells (map load/reset).</summary>
+        internal static void ClearConnectedCells() => ConnectedCells.Clear();
+
         private const float RotationStep = 11.25f;
 
         private static bool _arrowsWereEnabled;
         private static bool _fenceOverlayWasEnabled;
+
+        // ---- undo batching ---------------------------------------------------
+        // While a mouse gesture (drag) is in progress, individual tile actions
+        // accumulate here and are pushed to UndoHistory as ONE entry on release.
+
+        private static string _batchLabel;
+        private static List<Action> _batchUndos;
+        private static List<Action> _batchRedos;
+
+        /// <summary>
+        /// Record one applied mod action. During a mouse gesture the action is
+        /// batched; otherwise it is pushed to <see cref="UndoHistory"/> directly.
+        /// </summary>
+        private static void RecordAction(string label, Action undo, Action redo)
+        {
+            bool dragging = Input.GetMouseButton(0) || Input.GetMouseButton(1);
+            if (dragging)
+            {
+                if (_batchUndos == null)
+                {
+                    _batchLabel = label;
+                    _batchUndos = new List<Action>();
+                    _batchRedos = new List<Action>();
+                }
+                _batchUndos.Add(undo);
+                _batchRedos.Add(redo);
+            }
+            else
+            {
+                UndoHistory.Push(label, undo, redo);
+            }
+        }
+
+        private static void FlushUndoBatch()
+        {
+            if (_batchUndos == null || _batchUndos.Count == 0)
+            {
+                _batchLabel = null;
+                _batchUndos = null;
+                _batchRedos = null;
+                return;
+            }
+            var label = _batchLabel;
+            var undos = _batchUndos;
+            var redos = _batchRedos;
+            _batchLabel = null;
+            _batchUndos = null;
+            _batchRedos = null;
+            if (undos.Count == 1)
+            {
+                UndoHistory.Push(label, undos[0], redos[0]);
+                return;
+            }
+            UndoHistory.Push(label + " x" + undos.Count,
+                () =>
+                {
+                    for (int i = undos.Count - 1; i >= 0; i--)
+                    {
+                        undos[i]();
+                    }
+                },
+                () =>
+                {
+                    for (int i = 0; i < redos.Count; i++)
+                    {
+                        redos[i]();
+                    }
+                });
+        }
 
         public static void SetMode(EditorToolMode mode)
         {
@@ -146,7 +229,8 @@ namespace MapEditorMod
             {
                 return;
             }
-            if (Mode == EditorToolMode.LinkSwitch)
+            FlushUndoBatch();
+            if (Mode == EditorToolMode.LinkSwitch || Mode == EditorToolMode.LinkTeleport)
             {
                 TriggerArrows.Enabled = _arrowsWereEnabled;
             }
@@ -156,7 +240,8 @@ namespace MapEditorMod
             }
             Mode = mode;
             SwitchX = SwitchY = -1;
-            if (mode == EditorToolMode.LinkSwitch)
+            SwitchLayer = -1;
+            if (mode == EditorToolMode.LinkSwitch || mode == EditorToolMode.LinkTeleport)
             {
                 _arrowsWereEnabled = TriggerArrows.Enabled;
                 TriggerArrows.Enabled = true;
@@ -195,16 +280,82 @@ namespace MapEditorMod
 
         public static void ClearBrush()
         {
+            FlushUndoBatch();
             Stamp = null;
             AnimatedStamp = null;
             Composite = null;
             ConnectedStamp = null;
             SwitchX = SwitchY = -1;
+            SwitchLayer = -1;
             _lastStampX = _lastStampY = int.MinValue;
             _lastAnimStampX = _lastAnimStampY = int.MinValue;
             Blocks.ClearBrush();
             SetMode(EditorToolMode.None);
             OnChanged();
+        }
+
+        /// <summary>
+        /// Convert the current connected/animated/composite brush into a plain
+        /// single-tile brush (keeps painting the same art without CTM logic).
+        /// </summary>
+        public static bool ConvertToNormalBrush()
+        {
+            if (ConnectedStamp != null)
+            {
+                // Use the fully-connected variant (mask 15), falling back to any.
+                ConnectedVariant variant = null;
+                List<ConnectedVariant> list;
+                if (ConnectedStamp.Variants.TryGetValue(15, out list) && list.Count > 0)
+                {
+                    variant = list[0];
+                }
+                else
+                {
+                    foreach (var pair in ConnectedStamp.Variants)
+                    {
+                        if (pair.Value != null && pair.Value.Count > 0)
+                        {
+                            variant = pair.Value[0];
+                            break;
+                        }
+                    }
+                }
+                if (variant == null)
+                {
+                    return false;
+                }
+                Stamp = new TileStamp
+                {
+                    Atlas = variant.Atlas,
+                    X = variant.X, Y = variant.Y,
+                    W = variant.W, H = variant.H,
+                    Decor = ConnectedStamp.Decor,
+                };
+                ConnectedStamp = null;
+                AnimatedStamp = null;
+                Composite = null;
+                SetMode(EditorToolMode.PaintTile);
+                OnChanged();
+                return true;
+            }
+            if (AnimatedStamp != null && AnimatedStamp.Frames != null &&
+                AnimatedStamp.Frames.Count > 0)
+            {
+                var frame = AnimatedStamp.Frames[0];
+                Stamp = new TileStamp
+                {
+                    Atlas = frame.Atlas,
+                    X = frame.Rx, Y = frame.Ry,
+                    W = frame.Rw, H = frame.Rh,
+                    Decor = AnimatedStamp.Decor,
+                };
+                AnimatedStamp = null;
+                Composite = null;
+                SetMode(EditorToolMode.PaintTile);
+                OnChanged();
+                return true;
+            }
+            return false;
         }
 
         public static string HintText()
@@ -222,6 +373,10 @@ namespace MapEditorMod
                     return SwitchX < 0
                         ? "click the SWITCH tile first"
                         : $"switch ({SwitchX},{SwitchY}) — click fence tiles to link, Esc resets";
+                case EditorToolMode.LinkTeleport:
+                    return SwitchX < 0
+                        ? "click the START tile (e.g. stairs); you can change floors before picking the destination"
+                        : $"start ({SwitchX},{SwitchY}) floor {SwitchLayer} — switch floor if needed, then click the DESTINATION tile; Esc resets";
                 case EditorToolMode.PaintTile:
                     return Composite != null
                         ? $"LMB places structure \"{Composite.Name}\" {Composite.WTiles}x{Composite.HTiles} ({Composite.Parts.Count} parts){selHint}"
@@ -254,6 +409,8 @@ namespace MapEditorMod
                 return;
             }
 
+            TickUndoHotkeys();
+
             // Selection and rotation are available in all tool modes
             TickSelection();
             TickRotation();
@@ -271,6 +428,10 @@ namespace MapEditorMod
                 case EditorToolMode.LinkSwitch:
                     UpdateBrushCursor(new Color(0.3f, 0.8f, 1f, 0.95f));
                     TickLink();
+                    break;
+                case EditorToolMode.LinkTeleport:
+                    UpdateBrushCursor(new Color(1f, 0.5f, 0.9f, 0.95f));
+                    TickLinkTeleport();
                     break;
                 case EditorToolMode.PaintTile:
                     UpdateBrushCursor(new Color(0.35f, 1f, 0.5f, 0.95f));
@@ -292,6 +453,41 @@ namespace MapEditorMod
                     UpdateBrushCursor(new Color(0.65f, 0.45f, 1f, 0.95f));
                     TickPaintConnectedTile();
                     break;
+            }
+
+            // A finished mouse gesture closes the pending undo batch, so one
+            // drag = one undo step.
+            if (!Input.GetMouseButton(0) && !Input.GetMouseButton(1))
+            {
+                FlushUndoBatch();
+            }
+        }
+
+        /// <summary>Ctrl+Z undo, Ctrl+Y / Ctrl+Shift+Z redo (unified history).</summary>
+        private static void TickUndoHotkeys()
+        {
+            bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+            if (!ctrl || UiInput.IsTypingInInputField())
+            {
+                return;
+            }
+            bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            if (Input.GetKeyDown(KeyCode.Z))
+            {
+                FlushUndoBatch();
+                if (shift)
+                {
+                    UndoHistory.Redo();
+                }
+                else
+                {
+                    UndoHistory.Undo();
+                }
+            }
+            else if (Input.GetKeyDown(KeyCode.Y))
+            {
+                FlushUndoBatch();
+                UndoHistory.Redo();
             }
         }
 
@@ -394,24 +590,66 @@ namespace MapEditorMod
                 {
                     if (part.Animated && part.Frames != null && part.Frames.Count > 0)
                     {
-                        AnimatedModTiles.Place(x + part.Dx, y + part.Dy, baseLayer,
+                        PlaceAnimatedWithUndo(x + part.Dx, y + part.Dy, baseLayer,
                             part.Decor, part.Fps, part.Loop, part.PingPong,
                             part.Frames);
                     }
                     else if (!string.IsNullOrEmpty(part.Atlas))
                     {
-                        ModTiles.Place(x + part.Dx, y + part.Dy, baseLayer,
+                        PlaceTileWithUndo(x + part.Dx, y + part.Dy, baseLayer,
                             part.Decor, part.Atlas, part.X, part.Y, part.W, part.H);
                     }
                     else if (part.Vanilla && part.BlockId >= 0)
                     {
+                        // Vanilla blocks go through the game's own instruction
+                        // list; UndoHistory tracks those groups automatically.
                         Placement.PlaceBlock(part.BlockId, x + part.Dx, y + part.Dy);
                     }
                 }
                 return;
             }
-            ModTiles.Place(x, y, baseLayer, Stamp.Decor,
+            PlaceTileWithUndo(x, y, baseLayer, Stamp.Decor,
                 Stamp.Atlas, Stamp.X, Stamp.Y, Stamp.W, Stamp.H);
+        }
+
+        /// <summary>Place a static mod tile and record it in the undo history.</summary>
+        private static void PlaceTileWithUndo(int x, int y, int layer, bool decor,
+            string atlas, int rx, int ry, int rw, int rh)
+        {
+            var prev = ModTiles.TakeAnchored(x, y, layer, decor);
+            ModTiles.Place(x, y, layer, decor, atlas, rx, ry, rw, rh);
+            var placed = ModTiles.GetAnchored(x, y, layer, decor);
+            RecordAction("place tile",
+                () =>
+                {
+                    ModTiles.TakeAnchored(x, y, layer, decor);
+                    if (prev != null) ModTiles.Restore(prev);
+                },
+                () =>
+                {
+                    ModTiles.TakeAnchored(x, y, layer, decor);
+                    if (placed != null) ModTiles.Restore(placed);
+                });
+        }
+
+        /// <summary>Place an animated mod tile and record it in the undo history.</summary>
+        private static void PlaceAnimatedWithUndo(int x, int y, int layer, bool decor,
+            float fps, bool loop, bool pingPong, List<AnimatedModTiles.AnimFrame> frames)
+        {
+            var prev = AnimatedModTiles.TakeAnchored(x, y, layer, decor);
+            AnimatedModTiles.Place(x, y, layer, decor, fps, loop, pingPong, frames);
+            var placed = AnimatedModTiles.GetAnchored(x, y, layer, decor);
+            RecordAction("place animated tile",
+                () =>
+                {
+                    AnimatedModTiles.TakeAnchored(x, y, layer, decor);
+                    if (prev != null) AnimatedModTiles.Restore(prev);
+                },
+                () =>
+                {
+                    AnimatedModTiles.TakeAnchored(x, y, layer, decor);
+                    if (placed != null) AnimatedModTiles.Restore(placed);
+                });
         }
 
         private static void TickEraseTile()
@@ -428,9 +666,35 @@ namespace MapEditorMod
             if (Placement.GetCursorTile(out x, out y))
             {
                 int layer = CurrentEditorLayer();
-                ModTiles.EraseAt(x, y, layer);
-                AnimatedModTiles.EraseAt(x, y, layer);
+                EraseTilesWithUndo(x, y, layer, true, true);
             }
+        }
+
+        /// <summary>Erase mod tiles at a tile and record it in the undo history.</summary>
+        private static void EraseTilesWithUndo(int x, int y, int layer,
+            bool staticTiles, bool animatedTiles)
+        {
+            var taken = staticTiles
+                ? ModTiles.TakeAt(x, y, layer)
+                : new List<ModTiles.Placement>();
+            var takenAnim = animatedTiles
+                ? AnimatedModTiles.TakeAt(x, y, layer)
+                : new List<AnimatedModTiles.AnimatedPlacement>();
+            if (taken.Count == 0 && takenAnim.Count == 0)
+            {
+                return;
+            }
+            RecordAction("erase tile",
+                () =>
+                {
+                    foreach (var p in taken) ModTiles.Restore(p);
+                    foreach (var p in takenAnim) AnimatedModTiles.Restore(p);
+                },
+                () =>
+                {
+                    if (taken.Count > 0) ModTiles.EraseAt(x, y, layer);
+                    if (takenAnim.Count > 0) AnimatedModTiles.EraseAt(x, y, layer);
+                });
         }
 
         private static int _lastAnimStampX = int.MinValue;
@@ -467,7 +731,7 @@ namespace MapEditorMod
             _lastAnimStampX = x;
             _lastAnimStampY = y;
             int layer = CurrentEditorLayer();
-            AnimatedModTiles.Place(x, y, layer,
+            PlaceAnimatedWithUndo(x, y, layer,
                 AnimatedStamp.Decor, AnimatedStamp.Fps,
                 AnimatedStamp.Loop, AnimatedStamp.PingPong,
                 AnimatedStamp.Frames);
@@ -483,7 +747,7 @@ namespace MapEditorMod
             int x, y;
             if (Placement.GetCursorTile(out x, out y))
             {
-                AnimatedModTiles.EraseAt(x, y, CurrentEditorLayer());
+                EraseTilesWithUndo(x, y, CurrentEditorLayer(), false, true);
             }
         }
 
@@ -515,6 +779,7 @@ namespace MapEditorMod
                 Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
             int layer = CurrentEditorLayer();
             string key = ConnectedKey(x, y, layer);
+            var before = CaptureConnectedArea(x, y, layer);
             ConnectedCells[key] = new ConnectedCell
             {
                 Stamp = ConnectedStamp,
@@ -533,6 +798,12 @@ namespace MapEditorMod
             {
                 ElectricFences.SetElectrified(x, y, true);
             }
+            if (ConnectedStamp.CollideWithPlayers)
+            {
+                ModCollision.SetBlocked(x, y, layer, true);
+            }
+            RecordConnectedChange("connected paint",
+                before, CaptureConnectedArea(x, y, layer));
         }
 
         private static void EraseCurrentTileBrush()
@@ -552,7 +823,7 @@ namespace MapEditorMod
                     int py = y + part.Dy;
                     if (part.Animated)
                     {
-                        AnimatedModTiles.EraseAt(px, py, baseLayer);
+                        EraseTilesWithUndo(px, py, baseLayer, false, true);
                     }
                     else if (part.Vanilla && part.BlockId >= 0)
                     {
@@ -560,7 +831,7 @@ namespace MapEditorMod
                     }
                     else
                     {
-                        ModTiles.EraseAt(px, py, baseLayer);
+                        EraseTilesWithUndo(px, py, baseLayer, true, false);
                     }
                 }
                 return;
@@ -568,7 +839,7 @@ namespace MapEditorMod
 
             if (Stamp != null)
             {
-                ModTiles.EraseAt(x, y, baseLayer);
+                EraseTilesWithUndo(x, y, baseLayer, true, false);
             }
         }
 
@@ -579,7 +850,7 @@ namespace MapEditorMod
             {
                 return;
             }
-            AnimatedModTiles.EraseAt(x, y, CurrentEditorLayer());
+            EraseTilesWithUndo(x, y, CurrentEditorLayer(), false, true);
         }
 
         private static void EraseConnectedBrushAtCursor()
@@ -604,20 +875,104 @@ namespace MapEditorMod
             {
                 return;
             }
+            var before = CaptureConnectedArea(x, y, layer);
             ConnectedCells.Remove(key);
-            ModTiles.EraseAt(x, y, layer);
+            if (cell.Stamp != null)
+            {
+                // Remove only the resolved CTM placement (anchored 1x1).
+                ModTiles.TakeAnchored(x, y, layer, cell.Stamp.Decor);
+            }
+            else
+            {
+                ModTiles.EraseAt(x, y, layer);
+            }
             if (cell.Stamp != null && cell.Stamp.Damaging)
             {
                 ElectricFences.SetElectrified(x, y, false);
             }
+            ModCollision.SetBlocked(x, y, layer, false);
             ResolveConnectedAt(x + 1, y, layer);
             ResolveConnectedAt(x - 1, y, layer);
             ResolveConnectedAt(x, y + 1, layer);
             ResolveConnectedAt(x, y - 1, layer);
+            RecordConnectedChange("connected erase",
+                before, CaptureConnectedArea(x, y, layer));
         }
 
         private static string ConnectedKey(int x, int y, int layer)
             => layer + ":" + x + ":" + y;
+
+        // ---- connected-tile undo snapshots ----------------------------------
+
+        private sealed class ConnectedTileSnapshot
+        {
+            public int X, Y, Layer;
+            public ConnectedCell Cell;
+            public ModTiles.Placement Floor;
+            public ModTiles.Placement Decor;
+            public bool Electrified;
+            public bool Blocked;
+        }
+
+        private static ConnectedTileSnapshot CaptureConnectedTile(int x, int y, int layer)
+        {
+            ConnectedCell cell;
+            ConnectedCells.TryGetValue(ConnectedKey(x, y, layer), out cell);
+            return new ConnectedTileSnapshot
+            {
+                X = x, Y = y, Layer = layer,
+                Cell = cell,
+                Floor = ModTiles.GetAnchored(x, y, layer, false),
+                Decor = ModTiles.GetAnchored(x, y, layer, true),
+                Electrified = ElectricFences.IsElectrified(x, y),
+                Blocked = ModCollision.IsBlocked(x, y, layer),
+            };
+        }
+
+        private static void ApplyConnectedTileSnapshot(ConnectedTileSnapshot s)
+        {
+            string key = ConnectedKey(s.X, s.Y, s.Layer);
+            if (s.Cell != null)
+            {
+                ConnectedCells[key] = s.Cell;
+            }
+            else
+            {
+                ConnectedCells.Remove(key);
+            }
+            ModTiles.TakeAnchored(s.X, s.Y, s.Layer, false);
+            if (s.Floor != null) ModTiles.Restore(s.Floor);
+            ModTiles.TakeAnchored(s.X, s.Y, s.Layer, true);
+            if (s.Decor != null) ModTiles.Restore(s.Decor);
+            ElectricFences.SetElectrified(s.X, s.Y, s.Electrified);
+            ModCollision.SetBlocked(s.X, s.Y, s.Layer, s.Blocked);
+        }
+
+        private static List<ConnectedTileSnapshot> CaptureConnectedArea(int x, int y, int layer)
+        {
+            return new List<ConnectedTileSnapshot>
+            {
+                CaptureConnectedTile(x, y, layer),
+                CaptureConnectedTile(x + 1, y, layer),
+                CaptureConnectedTile(x - 1, y, layer),
+                CaptureConnectedTile(x, y + 1, layer),
+                CaptureConnectedTile(x, y - 1, layer),
+            };
+        }
+
+        private static void RecordConnectedChange(string label,
+            List<ConnectedTileSnapshot> before, List<ConnectedTileSnapshot> after)
+        {
+            RecordAction(label,
+                () =>
+                {
+                    foreach (var s in before) ApplyConnectedTileSnapshot(s);
+                },
+                () =>
+                {
+                    foreach (var s in after) ApplyConnectedTileSnapshot(s);
+                });
+        }
 
         private static bool ConnectsTo(int x, int y, int layer, ConnectedCell me)
         {
@@ -654,12 +1009,20 @@ namespace MapEditorMod
                 if (!stamp.Variants.TryGetValue(0, out list) || list.Count == 0)
                     return null;
             }
+            // Weight 0 disables a variant; if every variant is disabled fall
+            // back to the first so the brush still paints something.
             int total = 0;
-            foreach (var v in list) total += Math.Max(v.Weight, 1);
-            int roll = UnityEngine.Random.Range(0, Math.Max(total, 1));
+            foreach (var v in list) total += Math.Max(v.Weight, 0);
+            if (total <= 0)
+            {
+                return list[0];
+            }
+            int roll = UnityEngine.Random.Range(0, total);
             foreach (var v in list)
             {
-                roll -= Math.Max(v.Weight, 1);
+                int w = Math.Max(v.Weight, 0);
+                if (w == 0) continue;
+                roll -= w;
                 if (roll < 0) return v;
             }
             return list[0];
@@ -712,6 +1075,10 @@ namespace MapEditorMod
             if (ConnectedStamp == null) return;
             ConnectedStamp.Auto = auto;
             ConnectedStamp.ManualSingle = !auto;
+            if (!auto && ConnectedStamp.ManualMask < 0)
+            {
+                ConnectedStamp.ManualMask = 15;
+            }
             OnChanged();
         }
 
@@ -774,7 +1141,7 @@ namespace MapEditorMod
             {
                 return;
             }
-            variants[index].Weight = Mathf.Clamp(weight, 1, 100);
+            variants[index].Weight = Mathf.Clamp(weight, 0, 100);
             OnChanged();
         }
 
@@ -810,7 +1177,15 @@ namespace MapEditorMod
             int x, y;
             if (Placement.GetCursorTile(out x, out y))
             {
+                bool was = ElectricFences.IsElectrified(x, y);
+                if (was == on)
+                {
+                    return;
+                }
                 ElectricFences.SetElectrified(x, y, on);
+                RecordAction(on ? "electrify" : "clear electric",
+                    () => ElectricFences.SetElectrified(x, y, was),
+                    () => ElectricFences.SetElectrified(x, y, on));
             }
         }
 
@@ -826,6 +1201,10 @@ namespace MapEditorMod
             {
                 return;
             }
+            if (UiInput.IsPointerOverUi())
+            {
+                return;
+            }
             int x, y;
             if (!Placement.GetCursorTile(out x, out y))
             {
@@ -838,7 +1217,58 @@ namespace MapEditorMod
             }
             else
             {
-                Triggers.AddLink(SwitchX, SwitchY, x, y, Triggers.TriggerAction.ToggleFence);
+                var link = Triggers.AddLink(SwitchX, SwitchY, x, y,
+                    Triggers.TriggerAction.ToggleFence);
+                RecordAction("switch link",
+                    () => Triggers.Remove(link),
+                    () => Triggers.Restore(link));
+            }
+            OnChanged();
+        }
+
+        /// <summary>
+        /// Two-click teleport link tool: first click marks the source tile on
+        /// the current floor, the user may then switch floors, and the second
+        /// click marks the destination (e.g. stairs going up or down).
+        /// </summary>
+        private static void TickLinkTeleport()
+        {
+            if (Input.GetKeyDown(KeyCode.Escape) && SwitchX >= 0)
+            {
+                SwitchX = SwitchY = -1;
+                SwitchLayer = -1;
+                OnChanged();
+                return;
+            }
+            if (!Input.GetMouseButtonDown(0))
+            {
+                return;
+            }
+            if (UiInput.IsPointerOverUi())
+            {
+                return;
+            }
+            int x, y;
+            if (!Placement.GetCursorTile(out x, out y))
+            {
+                return;
+            }
+            int layer = CurrentEditorLayer();
+            if (SwitchX < 0)
+            {
+                SwitchX = x;
+                SwitchY = y;
+                SwitchLayer = layer;
+            }
+            else
+            {
+                var link = Triggers.AddLink(SwitchX, SwitchY, x, y,
+                    Triggers.TriggerAction.Teleport, SwitchLayer, layer);
+                RecordAction("teleport link",
+                    () => Triggers.Remove(link),
+                    () => Triggers.Restore(link));
+                SwitchX = SwitchY = -1;
+                SwitchLayer = -1;
             }
             OnChanged();
         }

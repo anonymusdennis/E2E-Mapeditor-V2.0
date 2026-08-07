@@ -152,6 +152,23 @@ namespace E2EApi.Features
         }
 
         /// <summary>
+        /// Return the placement anchored exactly at (x,y,layer,decor) without
+        /// removing it, or null (undo snapshot support).
+        /// </summary>
+        public static Placement GetAnchored(int x, int y, int layer, bool decor)
+        {
+            for (int i = Placements.Count - 1; i >= 0; i--)
+            {
+                var p = Placements[i];
+                if (p.X == x && p.Y == y && p.Layer == layer && p.Decor == decor)
+                {
+                    return p;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
         /// Rotate every placement covering the tile by <paramref name="delta"/> degrees.
         /// Returns how many placements were rotated.
         /// </summary>
@@ -196,6 +213,59 @@ namespace E2EApi.Features
                 Version++;
             }
             return removed;
+        }
+
+        /// <summary>
+        /// Remove every placement covering the tile and return them (undo support).
+        /// </summary>
+        public static List<Placement> TakeAt(int x, int y, int layer)
+        {
+            var taken = new List<Placement>();
+            for (int i = Placements.Count - 1; i >= 0; i--)
+            {
+                if (Placements[i].Covers(x, y, layer))
+                {
+                    taken.Add(Placements[i]);
+                    Placements.RemoveAt(i);
+                }
+            }
+            if (taken.Count > 0)
+            {
+                Version++;
+            }
+            return taken;
+        }
+
+        /// <summary>
+        /// Remove the placement anchored exactly at (x,y,layer,decor) and return
+        /// it, or null when none exists (undo support for Place, which replaces
+        /// same-anchor placements).
+        /// </summary>
+        public static Placement TakeAnchored(int x, int y, int layer, bool decor)
+        {
+            for (int i = Placements.Count - 1; i >= 0; i--)
+            {
+                var p = Placements[i];
+                if (p.X == x && p.Y == y && p.Layer == layer && p.Decor == decor)
+                {
+                    Placements.RemoveAt(i);
+                    Version++;
+                    return p;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>Re-insert a previously taken placement (undo support).</summary>
+        public static void Restore(Placement placement)
+        {
+            if (placement == null || Placements.Contains(placement))
+            {
+                return;
+            }
+            Initialise();
+            Placements.Add(placement);
+            Version++;
         }
 
         /// <summary>Any placement covering the tile (topmost wins)?</summary>

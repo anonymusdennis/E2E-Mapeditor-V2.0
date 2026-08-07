@@ -47,8 +47,9 @@ namespace MapEditorMod
             var list = UiFactory.VerticalList(_window.Content, 24f, 4f);
 
             var disclaimer = UiFactory.Label(list,
-                "Currently this feature is sadly broken, use at your own risk.", 11);
-            disclaimer.color = new Color(1f, 0.55f, 0.45f, 1f);
+                "Add, reorder and retype floors freely — the list and floor picker scroll " +
+                "when the map has many floors. Save & reload applies structural changes.", 11);
+            disclaimer.color = new Color(1f, 0.85f, 0.55f, 1f);
             UiFactory.FixHeight(disclaimer, 32f);
 
             _summary = UiFactory.Label(list, "", 12);
@@ -73,8 +74,7 @@ namespace MapEditorMod
             UiFactory.FixHeight(addTitle, 22f);
             AddAddRow(list);
 
-            _layersLabel = UiFactory.Label(list, "", 11);
-            UiFactory.FixHeight(_layersLabel, 160f);
+            _layersLabel = BuildLayersPanel(list, 160f);
 
             BuildTrashSection(list);
 
@@ -86,6 +86,57 @@ namespace MapEditorMod
                 MapGeometry.ResetDefault());
             UiFactory.FixHeight(reset, 26f);
             _window.SetVisible(false);
+        }
+
+        /// <summary>
+        /// Scrollable panel holding a single auto-sized text — the layer list
+        /// stays readable no matter how many floors the map has.
+        /// </summary>
+        private Text BuildLayersPanel(Transform list, float height)
+        {
+            var panelGo = new GameObject("LayersPanel");
+            panelGo.transform.SetParent(list, false);
+            panelGo.AddComponent<RectTransform>();
+            var panelEl = panelGo.AddComponent<LayoutElement>();
+            panelEl.preferredHeight = height;
+            panelEl.minHeight = height;
+            panelEl.flexibleHeight = 0f;
+
+            var panelBg = panelGo.AddComponent<Image>();
+            panelBg.color = new Color(0.10f, 0.10f, 0.14f, 0.85f);
+
+            var scroll = panelGo.AddComponent<ScrollRect>();
+            scroll.horizontal = false;
+            scroll.vertical = true;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = 24f;
+
+            var viewportGo = new GameObject("Viewport");
+            viewportGo.transform.SetParent(panelGo.transform, false);
+            var viewportRect = viewportGo.AddComponent<RectTransform>();
+            ModWindow.Stretch(viewportRect);
+            viewportGo.AddComponent<RectMask2D>();
+            scroll.viewport = viewportRect;
+
+            var textGo = new GameObject("LayersText");
+            textGo.transform.SetParent(viewportGo.transform, false);
+            var textRect = textGo.AddComponent<RectTransform>();
+            textRect.anchorMin = new Vector2(0f, 1f);
+            textRect.anchorMax = new Vector2(1f, 1f);
+            textRect.pivot = new Vector2(0.5f, 1f);
+            textRect.anchoredPosition = Vector2.zero;
+            textRect.sizeDelta = Vector2.zero;
+            var text = textGo.AddComponent<Text>();
+            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            text.fontSize = 11;
+            text.color = Color.white;
+            text.alignment = TextAnchor.UpperLeft;
+            text.raycastTarget = false;
+            var fitter = textGo.AddComponent<ContentSizeFitter>();
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            scroll.content = textRect;
+            return text;
         }
 
         private void BuildTrashSection(Transform list)

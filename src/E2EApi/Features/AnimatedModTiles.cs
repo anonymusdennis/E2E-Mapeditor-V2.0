@@ -202,12 +202,76 @@ namespace E2EApi.Features
             return null;
         }
 
+        /// <summary>
+        /// Return the animated placement anchored exactly at (x,y,layer,decor)
+        /// without removing it, or null (undo snapshot support).
+        /// </summary>
+        public static AnimatedPlacement GetAnchored(int x, int y, int layer, bool decor)
+        {
+            for (int i = Placements.Count - 1; i >= 0; i--)
+            {
+                var p = Placements[i];
+                if (p.X == x && p.Y == y && p.Layer == layer && p.Decor == decor)
+                {
+                    return p;
+                }
+            }
+            return null;
+        }
+
         /// <summary>Remove every animated placement covering the tile. Returns count removed.</summary>
         public static int EraseAt(int x, int y, int layer)
         {
             int removed = Placements.RemoveAll(p => p.Covers(x, y, layer));
             if (removed > 0) Version++;
             return removed;
+        }
+
+        /// <summary>
+        /// Remove every animated placement covering the tile and return them
+        /// (undo support).
+        /// </summary>
+        public static List<AnimatedPlacement> TakeAt(int x, int y, int layer)
+        {
+            var taken = new List<AnimatedPlacement>();
+            for (int i = Placements.Count - 1; i >= 0; i--)
+            {
+                if (Placements[i].Covers(x, y, layer))
+                {
+                    taken.Add(Placements[i]);
+                    Placements.RemoveAt(i);
+                }
+            }
+            if (taken.Count > 0) Version++;
+            return taken;
+        }
+
+        /// <summary>
+        /// Remove the animated placement anchored exactly at (x,y,layer,decor)
+        /// and return it, or null (undo support for Place).
+        /// </summary>
+        public static AnimatedPlacement TakeAnchored(int x, int y, int layer, bool decor)
+        {
+            for (int i = Placements.Count - 1; i >= 0; i--)
+            {
+                var p = Placements[i];
+                if (p.X == x && p.Y == y && p.Layer == layer && p.Decor == decor)
+                {
+                    Placements.RemoveAt(i);
+                    Version++;
+                    return p;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>Re-insert a previously taken placement (undo support).</summary>
+        public static void Restore(AnimatedPlacement placement)
+        {
+            if (placement == null || Placements.Contains(placement)) return;
+            Initialise();
+            Placements.Add(placement);
+            Version++;
         }
 
         public static void Clear()

@@ -14,7 +14,7 @@ namespace MapEditorMod
     internal class QuickPanel
     {
         private const float HeaderHeight = 26f;
-        private const float BodyHeight = 330f;
+        private const float BodyHeight = 490f;
         private const float Width = 240f;
 
         private GameObject _root;
@@ -24,6 +24,7 @@ namespace MapEditorMod
         private Text _paintLabel;
         private Text _eraseLabel;
         private Text _linkLabel;
+        private Text _teleportLabel;
         private Text _connectedSettingsLabel;
         private Text _connectedViewLabel;
         private Text _toolHint;
@@ -159,6 +160,35 @@ namespace MapEditorMod
                 });
             UiFactory.FixHeight(cameraLock, 24f);
 
+            var isolate = UiFactory.Toggle(list, "Only show selected floor",
+                MapGeometry.IsolateSelectedFloor, v =>
+                {
+                    Plugin.CfgIsolateFloor.Value = v;
+                });
+            UiFactory.FixHeight(isolate, 24f);
+
+            var below = UiFactory.Toggle(list, "Show floor below",
+                MapGeometry.ShowFloorBelow, v =>
+                {
+                    Plugin.CfgShowFloorBelow.Value = v;
+                });
+            UiFactory.FixHeight(below, 24f);
+
+            var above = UiFactory.Toggle(list, "Show floor above",
+                MapGeometry.ShowFloorAbove, v =>
+                {
+                    Plugin.CfgShowFloorAbove.Value = v;
+                });
+            UiFactory.FixHeight(above, 24f);
+
+            var undo = UiFactory.Button(list, "Undo (Ctrl+Z)",
+                () => UndoHistory.Undo());
+            UiFactory.FixHeight(undo, 24f);
+
+            var redo = UiFactory.Button(list, "Redo (Ctrl+Y)",
+                () => UndoHistory.Redo());
+            UiFactory.FixHeight(redo, 24f);
+
             var hint = UiFactory.Label(list, "click an arrow to jump along it", 10);
             hint.color = new Color(1f, 1f, 1f, 0.45f);
             UiFactory.FixHeight(hint, 16f);
@@ -177,6 +207,11 @@ namespace MapEditorMod
                 () => EditorTools.Toggle(EditorToolMode.LinkSwitch));
             UiFactory.FixHeight(link, 24f);
             _linkLabel = link.GetComponentInChildren<Text>();
+
+            var teleport = UiFactory.Button(list, "",
+                () => EditorTools.Toggle(EditorToolMode.LinkTeleport));
+            UiFactory.FixHeight(teleport, 24f);
+            _teleportLabel = teleport.GetComponentInChildren<Text>();
 
             var connectedSettings = UiFactory.Button(list, "",
                 () => Plugin.ShowConnectedBrushWindow());
@@ -219,6 +254,8 @@ namespace MapEditorMod
                 ? "■ Remove electricity (ON)" : "Remove electricity";
             _linkLabel.text = mode == EditorToolMode.LinkSwitch
                 ? "■ Link fence → switch (ON)" : "Link fence → switch";
+            _teleportLabel.text = mode == EditorToolMode.LinkTeleport
+                ? "■ Teleport link / stairs (ON)" : "Teleport link / stairs";
             var ct = EditorTools.ConnectedStamp;
             _connectedSettingsLabel.text = ct == null
                 ? "Connected texture settings"

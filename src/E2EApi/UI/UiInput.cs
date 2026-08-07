@@ -1,4 +1,5 @@
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace E2EApi.UI
 {
@@ -10,6 +11,21 @@ namespace E2EApi.UI
         {
             var es = EventSystem.current;
             return es != null && es.IsPointerOverGameObject();
+        }
+
+        /// <summary>
+        /// True while an InputField has keyboard focus, so tools can skip
+        /// hotkeys that would fire while the user is typing.
+        /// </summary>
+        public static bool IsTypingInInputField()
+        {
+            var es = EventSystem.current;
+            if (es == null || es.currentSelectedGameObject == null)
+            {
+                return false;
+            }
+            var field = es.currentSelectedGameObject.GetComponent<InputField>();
+            return field != null && field.isFocused;
         }
     }
 }

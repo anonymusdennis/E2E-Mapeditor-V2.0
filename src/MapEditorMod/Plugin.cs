@@ -41,6 +41,9 @@ namespace MapEditorMod
         internal static ConfigEntry<float> CfgQuickPanelX;
         internal static ConfigEntry<float> CfgQuickPanelY;
         internal static ConfigEntry<bool> CfgQuickPanelCollapsed;
+        internal static ConfigEntry<bool> CfgIsolateFloor;
+        internal static ConfigEntry<bool> CfgShowFloorBelow;
+        internal static ConfigEntry<bool> CfgShowFloorAbove;
 
         private readonly EditorWindow _window = new EditorWindow();
         private readonly QuickPanel _quickPanel = new QuickPanel();
@@ -72,6 +75,9 @@ namespace MapEditorMod
             E2EApi.Persistence.VanillaFallback.Initialise();
             E2EApi.Features.MultiplayerGate.Initialise();
             E2EApi.Features.WorkshopInterop.Initialise();
+            E2EApi.Features.ModCollision.Initialise();
+            E2EApi.Features.UndoHistory.Initialise();
+            ConnectedPersistence.Initialise();
 
             GameEvents.LevelLoaded += () =>
             {
@@ -171,7 +177,13 @@ namespace MapEditorMod
             {
                 MapGeometry.SyncEditorLayers();
                 EditorCamera.MaintainLock();
+                UndoHistory.Tick();
                 EditorTools.Tick();
+                ToolWheel.Tick();
+            }
+            else if (ToolWheel.IsOpen)
+            {
+                ToolWheel.Close();
             }
             if (editorActive && _window.IsCreated)
             {
@@ -215,6 +227,7 @@ namespace MapEditorMod
         {
             Log.LogInfo("level editor exited");
             _inEditor = false;
+            ToolWheel.Close();
             EditorTools.SetMode(EditorToolMode.None);
             TileSelector.Clear();
             _quickPanel.Hide();
@@ -231,6 +244,7 @@ namespace MapEditorMod
         private void OnPlaytestStarted()
         {
             Log.LogInfo("playtest started — hiding editor artifacts");
+            ToolWheel.Close();
             EditorTools.SetMode(EditorToolMode.None); // also clears mouse suppression
             TileSelector.Clear();
             VanillaEditor.SetBrushVisible(false);     // …but keep the brush hidden in play
@@ -359,6 +373,16 @@ namespace MapEditorMod
             CfgTriggerArrows = Config.Bind(
                 "Editor", "ShowLogicArrows", false,
                 "Draw arrows between logic switches and linked tiles.");
+            CfgIsolateFloor = Config.Bind(
+                "Editor", "IsolateSelectedFloor", true,
+                "Only render the selected floor while editing (extra floors above no longer " +
+                "cover your work). Disable for the vanilla 'everything below' view.");
+            CfgShowFloorBelow = Config.Bind(
+                "Editor", "ShowFloorBelow", false,
+                "When floor isolation is on, additionally show the floor below the selected one.");
+            CfgShowFloorAbove = Config.Bind(
+                "Editor", "ShowFloorAbove", false,
+                "When floor isolation is on, additionally show the floor above the selected one.");
             CfgQuickPanelX = Config.Bind(
                 "UI", "QuickPanelX", -8f,
                 "Quick panel horizontal offset from the top-right corner (pixels).");
@@ -385,6 +409,8 @@ namespace MapEditorMod
             XRay.Enabled = CfgXRay.Value;
             FenceOverlay.Enabled = CfgFenceOverlay.Value;
             TriggerArrows.Enabled = CfgTriggerArrows.Value;
+            MapGeometry.SetVisibilityPolicy(
+                CfgIsolateFloor.Value, CfgShowFloorBelow.Value, CfgShowFloorAbove.Value);
         }
     }
 
