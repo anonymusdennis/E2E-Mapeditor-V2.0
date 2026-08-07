@@ -85,6 +85,9 @@ namespace E2EApi.Features
         private static bool _virtualSelectionChanged;
         private static string _loadMismatchWarning;
         private static readonly List<VirtualLayer> _trashBin = new List<VirtualLayer>();
+        private static bool _isolateSelectedFloor = true;
+        private static bool _showFloorBelow;
+        private static bool _showFloorAbove;
 
         public static event Action Changed;
 
@@ -103,6 +106,44 @@ namespace E2EApi.Features
         public static bool IsNativeCompatible =>
             Width == NativeWidth && Height == NativeHeight && OriginX == 0 &&
             OriginY == 0 && LayerCount == NativeLayerCount;
+
+        /// <summary>
+        /// When true, only the selected floor (plus optional neighbours) is shown
+        /// in the editor. When false the vanilla "everything at or below the
+        /// current layer" behaviour is kept.
+        /// </summary>
+        public static bool IsolateSelectedFloor
+        {
+            get { return _isolateSelectedFloor; }
+            set { SetVisibilityPolicy(value, _showFloorBelow, _showFloorAbove); }
+        }
+
+        /// <summary>Also show the floor directly below the selected one.</summary>
+        public static bool ShowFloorBelow
+        {
+            get { return _showFloorBelow; }
+            set { SetVisibilityPolicy(_isolateSelectedFloor, value, _showFloorAbove); }
+        }
+
+        /// <summary>Also show the floor directly above the selected one.</summary>
+        public static bool ShowFloorAbove
+        {
+            get { return _showFloorAbove; }
+            set { SetVisibilityPolicy(_isolateSelectedFloor, _showFloorBelow, value); }
+        }
+
+        public static void SetVisibilityPolicy(bool isolate, bool below, bool above)
+        {
+            if (_isolateSelectedFloor == isolate && _showFloorBelow == below &&
+                _showFloorAbove == above)
+            {
+                return;
+            }
+            _isolateSelectedFloor = isolate;
+            _showFloorBelow = below;
+            _showFloorAbove = above;
+            ApplyLayerVisibility();
+        }
 
         public static void Initialise()
         {
@@ -123,6 +164,7 @@ namespace E2EApi.Features
             Editor.Patches.StairsPatchGroup.EnsurePatched();
             Editor.Patches.FloorZLookupPatchGroup.EnsurePatched();
             Editor.Patches.CharacterFloorPatchGroup.EnsurePatched();
+            Editor.Patches.LayerVisibilityPatchGroup.EnsurePatched();
             VirtualLayerListUi.Initialise();
             Editor.Patches.MapExpansionPatchRegistrar.EnsurePatched();
         }
@@ -612,10 +654,13 @@ namespace E2EApi.Features
         }
 
         /// <summary>
-        /// Show or hide the game-level backing layer objects to match the Hidden flags.
-        /// A hidden virtual layer's backing native layer is deactivated UNLESS the
-        /// currently selected virtual layer also uses that same backing layer — in that
-        /// case it stays visible so the player can keep editing.
+        /// Show or hide the game-level backing layer objects to match the current
+        /// visibility policy. With <see cref="IsolateSelectedFloor"/> active only
+        /// the selected floor's backing layer (plus the optional neighbour floors
+        /// from <see cref="ShowFloorBelow"/>/<see cref="ShowFloorAbove"/>) stays
+        /// visible. Otherwise every non-hidden virtual layer's backing is shown;
+        /// a hidden virtual layer's backing native layer is deactivated UNLESS the
+        /// currently selected virtual layer also uses that same backing layer.
         /// </summary>
         public static void ApplyLayerVisibility()
         {
@@ -629,22 +674,8 @@ namespace E2EApi.Features
                 return;
             }
 
-            int selectedBacking = GetBackingLayer(SelectedVirtualLayerIndex);
-
-            // Determine visibility for each native layer slot:
-            // visible if ANY non-hidden virtual layer uses it, OR if the selected
-            // virtual layer (even if marked hidden) uses it (auto-unhide while editing).
             var nativeVisible = new bool[NativeLayerCount];
-            for (int i = 0; i < _current.Layers.Count; i++)
-            {
-                var layer = _current.Layers[i];
-                int backing = Clamp(layer.BackingLayer, 0, NativeLayerCount - 1);
-                bool isSelected = (i == SelectedVirtualLayerIndex);
-                if (!layer.Hidden || isSelected)
-                {
-                    nativeVisible[backing] = true;
-                }
-            }
+            ComputeNativeVisibility(nativeVisible);
 
             for (int n = 0; n < NativeLayerCount && n < manager.m_BuildingLayers.Length; n++)
             {
@@ -655,6 +686,61 @@ namespace E2EApi.Features
                 if (ld.m_Walls != null) ld.m_Walls.SetActive(show);
                 if (ld.m_Decorations != null) ld.m_Decorations.SetActive(show);
             }
+
+            // Keep the editor's own highlight/tile hierarchy in sync too.
+            Editor.Patches.LayerVisibilityPatchGroup.ApplyPolicy();
+        }
+
+        /// <summary>
+        /// Fills <paramref name="nativeVisible"/> (length ≥ <see cref="NativeLayerCount"/>)
+        /// with the native backing slots that should be visible in the editor under
+        /// the current visibility policy.
+        /// </summary>
+        public static void ComputeNativeVisibility(bool[] nativeVisible)
+        {
+            EnsureValid();
+            for (int i = 0; i < NativeLayerCount; i++)
+            {
+                nativeVisible[i] = false;
+            }
+
+            int selected = SelectedVirtualLayerIndex;
+            if (_isolateSelectedFloor)
+            {
+                MarkBackingVisible(nativeVisible, selected);
+                if (_showFloorBelow)
+                {
+                    MarkBackingVisible(nativeVisible, selected - 1);
+                }
+                if (_showFloorAbove)
+                {
+                    MarkBackingVisible(nativeVisible, selected + 1);
+                }
+                return;
+            }
+
+            // Vanilla-like: every non-hidden virtual layer's backing is visible;
+            // the selected layer's backing always is (auto-unhide while editing).
+            for (int i = 0; i < _current.Layers.Count; i++)
+            {
+                var layer = _current.Layers[i];
+                int backing = Clamp(layer.BackingLayer, 0, NativeLayerCount - 1);
+                bool isSelected = (i == selected);
+                if (!layer.Hidden || isSelected)
+                {
+                    nativeVisible[backing] = true;
+                }
+            }
+        }
+
+        private static void MarkBackingVisible(bool[] nativeVisible, int virtualIndex)
+        {
+            if (virtualIndex < 0 || virtualIndex >= _current.Layers.Count)
+            {
+                return;
+            }
+            int backing = Clamp(_current.Layers[virtualIndex].BackingLayer, 0, NativeLayerCount - 1);
+            nativeVisible[backing] = true;
         }
 
 

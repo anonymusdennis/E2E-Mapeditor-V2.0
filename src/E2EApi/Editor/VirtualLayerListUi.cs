@@ -18,8 +18,11 @@ namespace E2EApi.Editor
     {
         private const float RowSpacing = 2f;
         private const float RowHeight = 34f;
-        /// <summary>Visible height of the scroll root; ~20 rows at 34px each.</summary>
-        private const float ScrollViewHeight = 680f;
+        /// <summary>Maximum visible height of the scroll root; ~20 rows at 34px each.</summary>
+        private const float MaxScrollViewHeight = 680f;
+        /// <summary>Minimum visible height so the list never collapses entirely.</summary>
+        private const float MinScrollViewHeight = 76f;
+        private const float ScrollbarWidth = 8f;
 
         private static bool _built;
         private static GameObject _scrollRoot;
@@ -76,6 +79,7 @@ namespace E2EApi.Editor
             {
                 return;
             }
+            UpdateViewHeight();
             RebuildButtons();
             ScrollToSelected(MapGeometry.SelectedVirtualLayerIndex);
         }
@@ -127,13 +131,14 @@ namespace E2EApi.Editor
             _scrollRoot = new GameObject("E2E_VirtualLayerList");
             _scrollRoot.transform.SetParent(anchor, false);
             var rootRect = _scrollRoot.AddComponent<RectTransform>();
-            // Anchor to top of parent container, extend down with an explicit large height
-            // so ~20 floors are visible without excessive scrolling (10x the original 2-row height).
+            // Anchor to top of parent container, extend down; the height adapts to
+            // the floor count (see UpdateViewHeight) and is capped so a visible
+            // scrollbar takes over when the list grows too large.
             rootRect.anchorMin = new Vector2(0f, 1f);
             rootRect.anchorMax = new Vector2(1f, 1f);
             rootRect.pivot = new Vector2(0.5f, 1f);
             rootRect.anchoredPosition = Vector2.zero;
-            rootRect.sizeDelta = new Vector2(0f, ScrollViewHeight);
+            rootRect.sizeDelta = new Vector2(0f, MaxScrollViewHeight);
             var rootLayoutEl = _scrollRoot.AddComponent<LayoutElement>();
             rootLayoutEl.ignoreLayout = true;
 
@@ -172,8 +177,101 @@ namespace E2EApi.Editor
 
             _scroll.viewport = viewportRect;
             _scroll.content = _content;
+
+            BuildScrollbar(viewportRect);
             _built = true;
             return true;
+        }
+
+        /// <summary>
+        /// Builds a slim always-available vertical scrollbar so large floor lists
+        /// are visibly scrollable (mousewheel continues to work as before).
+        /// </summary>
+        private static void BuildScrollbar(RectTransform viewportRect)
+        {
+            var sbGo = new GameObject("Scrollbar");
+            sbGo.transform.SetParent(_scrollRoot.transform, false);
+            var sbRect = sbGo.AddComponent<RectTransform>();
+            sbRect.anchorMin = new Vector2(1f, 0f);
+            sbRect.anchorMax = new Vector2(1f, 1f);
+            sbRect.pivot = new Vector2(1f, 0.5f);
+            sbRect.anchoredPosition = Vector2.zero;
+            sbRect.sizeDelta = new Vector2(ScrollbarWidth, 0f);
+            var sbBg = sbGo.AddComponent<Image>();
+            sbBg.color = new Color(0.08f, 0.08f, 0.10f, 0.85f);
+
+            var scrollbar = sbGo.AddComponent<Scrollbar>();
+            scrollbar.direction = Scrollbar.Direction.BottomToTop;
+
+            var slidingGo = new GameObject("SlidingArea");
+            slidingGo.transform.SetParent(sbGo.transform, false);
+            var slidingRect = slidingGo.AddComponent<RectTransform>();
+            ModWindow.Stretch(slidingRect);
+
+            var handleGo = new GameObject("Handle");
+            handleGo.transform.SetParent(slidingGo.transform, false);
+            var handleRect = handleGo.AddComponent<RectTransform>();
+            ModWindow.Stretch(handleRect);
+            var handleImg = handleGo.AddComponent<Image>();
+            handleImg.color = new Color(0.45f, 0.45f, 0.58f, 1f);
+
+            scrollbar.handleRect = handleRect;
+            scrollbar.targetGraphic = handleImg;
+
+            // Keep rows clear of the scrollbar strip.
+            viewportRect.offsetMax = new Vector2(-(ScrollbarWidth + 2f), 0f);
+
+            _scroll.verticalScrollbar = scrollbar;
+            _scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+        }
+
+        /// <summary>
+        /// Sizes the scroll view to the floor count: grows with the list, capped by
+        /// both <see cref="MaxScrollViewHeight"/> and the space available between
+        /// the list anchor and the bottom of the screen (so oversized floor counts
+        /// scroll instead of running off-screen).
+        /// </summary>
+        private static void UpdateViewHeight()
+        {
+            if (_scrollRoot == null)
+            {
+                return;
+            }
+            var rootRect = _scrollRoot.GetComponent<RectTransform>();
+            if (rootRect == null)
+            {
+                return;
+            }
+
+            float desired = MapGeometry.LayerCount * (RowHeight + RowSpacing) + 6f;
+            float max = MaxScrollViewHeight;
+
+            // Constrain by the on-screen space below the anchor's top edge.
+            var canvas = _scrollRoot.GetComponentInParent<Canvas>();
+            if (canvas != null)
+            {
+                var corners = new Vector3[4];
+                rootRect.GetWorldCorners(corners);
+                var canvasRect = canvas.transform as RectTransform;
+                if (canvasRect != null)
+                {
+                    var canvasCorners = new Vector3[4];
+                    canvasRect.GetWorldCorners(canvasCorners);
+                    float scale = rootRect.lossyScale.y;
+                    if (scale > 0.0001f)
+                    {
+                        // corners[1] = our top-left in world space; canvasCorners[0] = canvas bottom-left.
+                        float available = (corners[1].y - canvasCorners[0].y) / scale - 24f;
+                        if (available > MinScrollViewHeight)
+                        {
+                            max = Mathf.Min(max, available);
+                        }
+                    }
+                }
+            }
+
+            float height = Mathf.Clamp(desired, MinScrollViewHeight, max);
+            rootRect.sizeDelta = new Vector2(0f, height);
         }
 
         private static void RebuildButtons()
