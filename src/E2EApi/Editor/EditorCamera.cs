@@ -1,3 +1,4 @@
+using E2EApi.Features;
 using UnityEngine;
 
 namespace E2EApi.Editor
@@ -117,8 +118,17 @@ namespace E2EApi.Editor
             {
                 return false;
             }
+            if (!MapGeometry.IsWithinMapBounds(x, y))
+            {
+                return false;
+            }
+            float minX, maxX, minY, maxY;
+            MapGeometry.GetCameraLocalClamp(out minX, out maxX, out minY, out maxY);
             var cam = controller.m_MainCamera.transform;
-            var target = new Vector3(x, y, cam.localPosition.z);
+            // Editor tile centre is (tile - 59.5) in level-base local space.
+            float lx = Mathf.Clamp(x - 59.5f, minX, maxX);
+            float ly = Mathf.Clamp(y - 59.5f, minY, maxY);
+            var target = new Vector3(lx, ly, cam.localPosition.z);
             cam.localPosition = controller.GetCorrectedPosition(target);
             return true;
         }

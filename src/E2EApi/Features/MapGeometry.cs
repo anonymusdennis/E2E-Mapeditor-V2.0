@@ -100,7 +100,22 @@ namespace E2EApi.Features
         public static int Version { get; private set; }
         public static IList<VirtualLayer> TrashBin => _trashBin;
         public static int TrashCount => _trashBin.Count;
+        public enum AddLayerResult
+        {
+            Added,
+            NeedsModConfirmation,
+            Failed,
+        }
+
+        /// <summary>
+        /// Fired by <see cref="AddLayer"/> when adding would require extended
+        /// floors (more than 6 exclusive native slots) and the caller has not
+        /// confirmed yet.
+        /// </summary>
+        public static event Action<VirtualLayerType> ExtendedFloorConfirmationNeeded;
+
         public static bool IsNativeCompatible =>
+            !ExtendedFloors.Enabled &&
             Width == NativeWidth && Height == NativeHeight && OriginX == 0 &&
             OriginY == 0 && LayerCount == NativeLayerCount;
 
@@ -125,6 +140,9 @@ namespace E2EApi.Features
             Editor.Patches.CharacterFloorPatchGroup.EnsurePatched();
             VirtualLayerListUi.Initialise();
             Editor.Patches.MapExpansionPatchRegistrar.EnsurePatched();
+            Editor.Patches.CameraBoundsPatch.EnsurePatched();
+            Editor.Patches.VanillaBoundsGuardPatchRegistrar.EnsurePatched();
+            ExtendedFloors.Initialise();
         }
 
         public static VirtualLayer GetLayer(int index)
@@ -170,6 +188,30 @@ namespace E2EApi.Features
         /// </remarks>
         private static int SmartBackingLayer(VirtualLayerType type, int excludeBackingLayer = -1)
         {
+            var usage = new int[NativeLayerCount];
+            int distinctNative = 0;
+            int maxUsed = -1;
+            foreach (var layer in _current.Layers)
+            {
+                int b = layer.BackingLayer;
+                if (b > maxUsed) maxUsed = b;
+                if (b >= 0 && b < NativeLayerCount)
+                {
+                    if (usage[b] == 0) distinctNative++;
+                    usage[b]++;
+                }
+            }
+
+            // Extended mode: once every native slot is taken, allocate the next
+            // exclusive index above the highest used backing layer.
+            if (ExtendedFloors.Enabled && distinctNative >= NativeLayerCount)
+            {
+                int next = maxUsed + 1;
+                if (next < NativeLayerCount) next = NativeLayerCount;
+                if (next > ExtendedFloors.MaxFloors - 1) next = ExtendedFloors.MaxFloors - 1;
+                return next;
+            }
+
             int[] preferred;
             switch (type)
             {
@@ -177,14 +219,6 @@ namespace E2EApi.Features
                 case VirtualLayerType.Vent:        preferred = new[] { 2, 4, 1, 3, 0, 5 }; break;
                 case VirtualLayerType.Roof:        preferred = new[] { 5, 3, 1, 0, 2, 4 }; break;
                 default:                           preferred = new[] { 1, 3, 0, 2, 4, 5 }; break;
-            }
-            var usage = new int[NativeLayerCount];
-            foreach (var layer in _current.Layers)
-            {
-                if (layer.BackingLayer >= 0 && layer.BackingLayer < NativeLayerCount)
-                {
-                    usage[layer.BackingLayer]++;
-                }
             }
 
             // First pass: find the least-used slot that is NOT the excluded one.
@@ -227,11 +261,35 @@ namespace E2EApi.Features
             return best;
         }
 
+        private static int CountDistinctNativeBackings()
+        {
+            var used = new bool[NativeLayerCount];
+            int count = 0;
+            foreach (var layer in _current.Layers)
+            {
+                int b = layer.BackingLayer;
+                if (b >= 0 && b < NativeLayerCount && !used[b])
+                {
+                    used[b] = true;
+                    count++;
+                }
+            }
+            return count;
+        }
+
         public static void SelectLayer(int index)
         {
             _selectedIndex = ClampLayerIndex(index);
             _virtualSelectionChanged = true;
-            SyncNativeEditorLayer();
+            int backing = GetBackingLayer(_selectedIndex);
+            if (ExtendedFloors.Enabled)
+            {
+                ExtendedFloors.SyncEditorToPhysical(backing);
+            }
+            else
+            {
+                SyncNativeEditorLayer();
+            }
             ApplyLayerVisibility();
             FireChanged();
         }
@@ -247,6 +305,7 @@ namespace E2EApi.Features
             _selectedIndex = ClampLayerIndex(_selectedIndex);
             _virtualSelectionChanged = true;
             FloorTypeRegistry.RebuildFromGeometry();
+            ApplyLayerVisibility();
             FireChanged();
         }
 
@@ -263,9 +322,111 @@ namespace E2EApi.Features
             state.OriginX = originX;
             state.OriginY = originY;
             Apply(state);
+            // Keep the camera inside the new rectangle so ± bounds buttons feel live.
+            var controller = LevelEditor_Controller.GetInstance();
+            if (controller != null)
+            {
+                Editor.Patches.CameraBoundsPatch.ReclampCamera(controller);
+            }
         }
 
+        /// <summary>
+        /// Legacy entry point: tries to add, and raises
+        /// <see cref="ExtendedFloorConfirmationNeeded"/> when confirmation is required.
+        /// Prefer <see cref="TryAddLayer"/> + <see cref="ConfirmExtendedAndAddLayer"/>.
+        /// </summary>
         public static void AddLayer(VirtualLayerType type)
+        {
+            var result = TryAddLayer(type);
+            if (result == AddLayerResult.NeedsModConfirmation)
+            {
+                var handler = ExtendedFloorConfirmationNeeded;
+                if (handler != null)
+                {
+                    handler(type);
+                }
+            }
+        }
+
+        public static AddLayerResult TryAddLayer(VirtualLayerType type)
+        {
+            try
+            {
+                EnsureValid();
+                if (!ExtendedFloors.Enabled &&
+                    CountDistinctNativeBackings() >= NativeLayerCount)
+                {
+                    // Floors beyond 6 are WIP — shared-slot adds still allowed below
+                    // once UserCreationEnabled is turned back on for exclusive ≥7.
+                    if (!ExtendedFloors.UserCreationEnabled)
+                    {
+                        Log.Info("TryAddLayer: exclusive floors beyond 6 are WIP — using shared backing");
+                    }
+                    else
+                    {
+                        return AddLayerResult.NeedsModConfirmation;
+                    }
+                }
+
+                if (ExtendedFloors.Enabled && ExtendedFloors.UserCreationEnabled)
+                {
+                    AddLayerExclusive(type);
+                }
+                else
+                {
+                    AddLayerWithBacking(type, SmartBackingLayer(type), exclusive: false);
+                }
+                return AddLayerResult.Added;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("TryAddLayer failed: " + ex);
+                return AddLayerResult.Failed;
+            }
+        }
+
+        /// <summary>
+        /// User confirmed extended floors: enable the feature and add an exclusive layer.
+        /// No-op while <see cref="ExtendedFloors.UserCreationEnabled"/> is false.
+        /// </summary>
+        public static void ConfirmExtendedAndAddLayer(VirtualLayerType type)
+        {
+            if (!ExtendedFloors.UserCreationEnabled)
+            {
+                Log.Warn("ConfirmExtendedAndAddLayer blocked — extended floors are WIP");
+                return;
+            }
+            ExtendedFloors.Enable("user confirmed");
+            AddLayerExclusive(type);
+        }
+
+        /// <summary>
+        /// Adds a virtual layer with an exclusive physical floor (may be ≥ 6).
+        /// </summary>
+        public static void AddLayerExclusive(VirtualLayerType type)
+        {
+            if (!ExtendedFloors.Enabled)
+            {
+                ExtendedFloors.Enable("AddLayerExclusive");
+            }
+            int backing = ExtendedFloors.AllocateExclusiveFloor(type);
+            if (backing < 0)
+            {
+                throw new InvalidOperationException("AllocateExclusiveFloor failed");
+            }
+            ExtendedFloors.EnsureCapacity(backing + 1);
+            AddLayerWithBacking(type, backing, exclusive: true);
+            try
+            {
+                ModExtras.Current.RequiresMod = true;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("AddLayerExclusive RequiresMod: " + ex.Message);
+            }
+        }
+
+        private static void AddLayerWithBacking(VirtualLayerType type, int backing, bool exclusive)
         {
             var state = _current.Clone();
             int id = 0;
@@ -273,15 +434,65 @@ namespace E2EApi.Features
             {
                 if (layer.Id >= id) id = layer.Id + 1;
             }
+
+            if (!exclusive)
+            {
+                // Warn when the new floor must share a native slot — content is still
+                // isolated for mod tiles (virtual index), but vanilla tiles share.
+                int users = 0;
+                foreach (var layer in state.Layers)
+                {
+                    if (layer.BackingLayer == backing) users++;
+                }
+                if (users > 0)
+                {
+                    Log.Warn("AddLayer: native backing " + backing +
+                        " is already used by " + users +
+                        " virtual layer(s). Vanilla tiles will be shared; mod tiles stay per-virtual.");
+                }
+            }
+
             state.Layers.Add(new VirtualLayer
             {
                 Id = id,
                 Name = DefaultName(type, state.Layers.Count),
                 Type = type,
-                BackingLayer = SmartBackingLayer(type),
+                BackingLayer = backing,
             });
             Apply(state);
-            SelectLayer(state.Layers.Count - 1);
+            // Defer selection so UI rebuild (Destroy) does not run inside the
+            // same click event that created the layer — that crashed Unity.
+            int newIndex = state.Layers.Count - 1;
+            _selectedIndex = newIndex;
+            _virtualSelectionChanged = true;
+            if (exclusive)
+            {
+                ExtendedFloors.SyncEditorToPhysical(backing);
+            }
+            E2EApi.MainThread.Post(() =>
+            {
+                try
+                {
+                    SelectLayer(newIndex);
+                    if (exclusive)
+                    {
+                        ExtendedFloors.SyncEditorToPhysical(GetBackingLayer(newIndex));
+                    }
+                    var ui = LevelEditor_UIController.GetInstance();
+                    if (ui != null)
+                    {
+                        int physical = exclusive
+                            ? ExtendedFloors.GetEditorPhysicalLayer()
+                            : GetBackingLayer(newIndex);
+                        ui.ExternalChangeLayer(ToNativeUiLayer(physical));
+                        ui.UpdateLayerChanges();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("AddLayer deferred select failed: " + ex.Message);
+                }
+            });
         }
 
         public static void RemoveLayer(int index)
@@ -335,8 +546,49 @@ namespace E2EApi.Features
             var state = _current.Clone();
             index = Math.Max(0, Math.Min(index, state.Layers.Count - 1));
             state.Layers[index].Hidden = hidden;
+            // Hiding the selected layer would otherwise look like a no-op (selected
+            // floors stay visible for editing). Jump to another visible floor first.
+            if (hidden && index == ClampLayerIndex(_selectedIndex))
+            {
+                int fallback = FindVisibleLayerIndex(state, preferNear: index);
+                if (fallback >= 0 && fallback != index)
+                {
+                    _selectedIndex = fallback;
+                    _virtualSelectionChanged = true;
+                }
+            }
             Apply(state);
-            ApplyLayerVisibility();
+        }
+
+        /// <summary>True when the virtual layer is marked hidden.</summary>
+        public static bool IsLayerHidden(int virtualIndex)
+        {
+            EnsureValid();
+            if (virtualIndex < 0 || virtualIndex >= _current.Layers.Count)
+            {
+                return false;
+            }
+            return _current.Layers[virtualIndex].Hidden;
+        }
+
+        private static int FindVisibleLayerIndex(GeometryState state, int preferNear)
+        {
+            int best = -1;
+            int bestDist = int.MaxValue;
+            for (int i = 0; i < state.Layers.Count; i++)
+            {
+                if (state.Layers[i].Hidden)
+                {
+                    continue;
+                }
+                int dist = Math.Abs(i - preferNear);
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    best = i;
+                }
+            }
+            return best;
         }
 
         public static void MoveLayer(int index, int delta)
@@ -367,25 +619,38 @@ namespace E2EApi.Features
 
         public static void DuplicateLayer(int index)
         {
-            var state = _current.Clone();
-            index = Math.Max(0, Math.Min(index, state.Layers.Count - 1));
-            var source = state.Layers[index];
-            int id = 0;
-            foreach (var layer in state.Layers)
+            try
             {
-                if (layer.Id >= id) id = layer.Id + 1;
+                var state = _current.Clone();
+                index = Math.Max(0, Math.Min(index, state.Layers.Count - 1));
+                var source = state.Layers[index];
+                int id = 0;
+                foreach (var layer in state.Layers)
+                {
+                    if (layer.Id >= id) id = layer.Id + 1;
+                }
+                // Prefer a different native slot so the copy is independent when possible.
+                state.Layers.Insert(index + 1, new VirtualLayer
+                {
+                    Id = id,
+                    Name = source.Name + " copy",
+                    Type = source.Type,
+                    BackingLayer = SmartBackingLayer(source.Type, excludeBackingLayer: source.BackingLayer),
+                });
+                int newIndex = index + 1;
+                Apply(state);
+                _selectedIndex = newIndex;
+                _virtualSelectionChanged = true;
+                E2EApi.MainThread.Post(() =>
+                {
+                    try { SelectLayer(newIndex); }
+                    catch (Exception ex) { Log.Error("DuplicateLayer select failed: " + ex.Message); }
+                });
             }
-            // Pick a new backing layer that is different from the source so the
-            // duplicate is a genuinely independent physical floor, not a shared alias.
-            state.Layers.Insert(index + 1, new VirtualLayer
+            catch (Exception ex)
             {
-                Id = id,
-                Name = source.Name + " copy",
-                Type = source.Type,
-                BackingLayer = SmartBackingLayer(source.Type, excludeBackingLayer: source.BackingLayer),
-            });
-            Apply(state);
-            SelectLayer(index + 1);
+                Log.Error("DuplicateLayer failed: " + ex);
+            }
         }
 
         /// <summary>
@@ -496,8 +761,17 @@ namespace E2EApi.Features
                 section.Add("version=" + FormatVersion);
                 section.Add("selected=" + SelectedVirtualLayerIndex);
                 section.Add("hash=" + CompatibilityHash);
-                section.Add("bounds=" + _current.Width + "," + _current.Height + "," +
-                    _current.OriginX + "," + _current.OriginY);
+                string bounds = _current.Width + "," + _current.Height + "," +
+                    _current.OriginX + "," + _current.OriginY;
+                if (ExtendedFloors.Enabled)
+                {
+                    bounds += ",extended=1";
+                }
+                section.Add("bounds=" + bounds);
+                if (ExtendedFloors.Enabled)
+                {
+                    section.Add("extended=1");
+                }
                 foreach (var layer in _current.Layers)
                 {
                     section.Add("layer=" + layer.Id + "|" + layer.Type + "|" +
@@ -557,6 +831,7 @@ namespace E2EApi.Features
             }
             _lastNativeLayer = -1;
             SyncNativeEditorLayer();
+            ApplyLayerVisibility();
             FireChanged();
         }
 
@@ -566,8 +841,19 @@ namespace E2EApi.Features
             {
                 return;
             }
-            var editor = EditorLevelEditorManager.GetLevelEditorInstance();
             int backing = GetBackingLayer(SelectedVirtualLayerIndex);
+            if (ExtendedFloors.Enabled || backing >= NativeLayerCount)
+            {
+                // Never write backing ≥ 6 into m_CurrentLayer — that undoes the
+                // GroundFloor work-slot alias used for extended-floor painting.
+                // Also skip the cast while ExtendedFloors is still enabling on load.
+                if (ExtendedFloors.Enabled)
+                {
+                    ExtendedFloors.SyncEditorToPhysical(backing);
+                }
+                return;
+            }
+            var editor = EditorLevelEditorManager.GetLevelEditorInstance();
             if (editor != null && (int)editor.m_CurrentLayer != backing)
             {
                 editor.m_CurrentLayer = (BaseLevelManager.LevelLayers)backing;
@@ -576,7 +862,28 @@ namespace E2EApi.Features
 
         public static void SyncFromNativeEditorLayer(int nativeLayer)
         {
-            nativeLayer = Clamp(nativeLayer, 0, NativeLayerCount - 1);
+            // While an extended floor is aliased onto GroundFloor, vanilla reports
+            // native layer 1 — map that back to the aliased physical index.
+            if (ExtendedFloors.Enabled &&
+                ExtendedFloors.AliasedPhysical >= ExtendedFloors.NativeCount &&
+                nativeLayer == 1)
+            {
+                nativeLayer = ExtendedFloors.AliasedPhysical;
+            }
+            else if (ExtendedFloors.Enabled &&
+                     ExtendedFloors.ActivePhysicalIndex >= ExtendedFloors.NativeCount &&
+                     nativeLayer == 1)
+            {
+                nativeLayer = ExtendedFloors.ActivePhysicalIndex;
+            }
+            else
+            {
+                int maxBacking = ExtendedFloors.Enabled
+                    ? Math.Max(NativeLayerCount, ExtendedFloors.PhysicalCount) - 1
+                    : NativeLayerCount - 1;
+                nativeLayer = Clamp(nativeLayer, 0, maxBacking);
+            }
+
             int best = SelectedVirtualLayerIndex;
             int bestDistance = int.MaxValue;
             for (int i = 0; i < _current.Layers.Count; i++)
@@ -600,6 +907,24 @@ namespace E2EApi.Features
             SyncNativeEditorLayer();
         }
 
+        /// <summary>
+        /// Native <see cref="BaseLevelManager.LevelLayers"/> value safe for
+        /// vanilla UI APIs (<c>ExternalChangeLayer</c>). Extended physical
+        /// indices map to GroundFloor (the paint work-slot).
+        /// </summary>
+        public static BaseLevelManager.LevelLayers ToNativeUiLayer(int physical)
+        {
+            if (physical < 0)
+            {
+                return BaseLevelManager.LevelLayers.GroundFloor;
+            }
+            if (physical >= NativeLayerCount)
+            {
+                return BaseLevelManager.LevelLayers.GroundFloor;
+            }
+            return (BaseLevelManager.LevelLayers)physical;
+        }
+
         public static bool IsWithinMapBounds(int x, int y)
         {
             return x >= OriginX && x < OriginX + Width &&
@@ -612,10 +937,11 @@ namespace E2EApi.Features
         }
 
         /// <summary>
-        /// Show or hide the game-level backing layer objects to match the Hidden flags.
-        /// A hidden virtual layer's backing native layer is deactivated UNLESS the
-        /// currently selected virtual layer also uses that same backing layer — in that
-        /// case it stays visible so the player can keep editing.
+        /// Show or hide game-level backing layer objects to match Hidden flags.
+        /// A native slot stays visible when any non-hidden virtual layer uses it,
+        /// or when it is the currently selected editing layer (so you can edit it).
+        /// Also drives the editor highlight master roots so vanilla cutaway cannot
+        /// immediately re-show a hidden floor.
         /// </summary>
         public static void ApplyLayerVisibility()
         {
@@ -629,32 +955,87 @@ namespace E2EApi.Features
                 return;
             }
 
-            int selectedBacking = GetBackingLayer(SelectedVirtualLayerIndex);
+            int selected = SelectedVirtualLayerIndex;
+            int selectedBacking = GetBackingLayer(selected);
+            int layerCount = manager.m_BuildingLayers.Length;
+            int currentPhysical = ExtendedFloors.Enabled
+                ? ExtendedFloors.GetEditorPhysicalLayer(selected)
+                : (int)manager.m_CurrentLayer;
 
-            // Determine visibility for each native layer slot:
-            // visible if ANY non-hidden virtual layer uses it, OR if the selected
-            // virtual layer (even if marked hidden) uses it (auto-unhide while editing).
-            var nativeVisible = new bool[NativeLayerCount];
+            var nativeVisible = new bool[layerCount];
             for (int i = 0; i < _current.Layers.Count; i++)
             {
                 var layer = _current.Layers[i];
-                int backing = Clamp(layer.BackingLayer, 0, NativeLayerCount - 1);
-                bool isSelected = (i == SelectedVirtualLayerIndex);
+                int backing = Clamp(layer.BackingLayer, 0, layerCount - 1);
+                bool isSelected = (i == selected);
                 if (!layer.Hidden || isSelected)
                 {
                     nativeVisible[backing] = true;
                 }
             }
 
-            for (int n = 0; n < NativeLayerCount && n < manager.m_BuildingLayers.Length; n++)
+            for (int n = 0; n < layerCount; n++)
             {
                 var ld = manager.m_BuildingLayers[n];
-                bool show = nativeVisible[n];
-                if (ld.m_Objects != null) ld.m_Objects.SetActive(show);
-                if (ld.m_Tiles != null) ld.m_Tiles.gameObject.SetActive(show);
-                if (ld.m_Walls != null) ld.m_Walls.SetActive(show);
-                if (ld.m_Decorations != null) ld.m_Decorations.SetActive(show);
+                if (ld == null)
+                {
+                    continue;
+                }
+                // Honour hide; cutaway shows floors at/below the active physical index.
+                bool show = nativeVisible[n] && (n <= currentPhysical || n == selectedBacking);
+                try
+                {
+                    if (ld.m_Objects != null) ld.m_Objects.SetActive(show);
+                    if (ld.m_Tiles != null) ld.m_Tiles.gameObject.SetActive(show);
+                    if (ld.m_Walls != null) ld.m_Walls.SetActive(show);
+                    if (ld.m_Decorations != null) ld.m_Decorations.SetActive(show);
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug("ApplyLayerVisibility building-layer " + n + ": " + ex.Message);
+                }
             }
+
+            // Vanilla UpdateLayerChanges reactivates m_MasterLayers by cutaway alone —
+            // re-apply hide there so right-click hide is not undone next frame.
+            try
+            {
+                var highlight = LevelEditorHighLightManager.GetInstance();
+                if (highlight != null && highlight.m_MasterLayers != null)
+                {
+                    int masterCount = Math.Min(layerCount, highlight.m_MasterLayers.Length);
+                    for (int n = 0; n < masterCount; n++)
+                    {
+                        var root = highlight.m_MasterLayers[n];
+                        if (root == null)
+                        {
+                            continue;
+                        }
+                        bool show = nativeVisible[n] && (n <= currentPhysical || n == selectedBacking);
+                        root.SetActive(show);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("ApplyLayerVisibility master-layers: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Editor camera local-space clamp for the current map bounds.
+        /// Tile centre in editor space is (tile - 59.5).
+        /// </summary>
+        public static void GetCameraLocalClamp(out float minX, out float maxX,
+            out float minY, out float maxY)
+        {
+            minX = OriginX - 59.5f;
+            maxX = OriginX + Width - 1 - 59.5f;
+            minY = OriginY - 59.5f;
+            maxY = OriginY + Height - 1 - 59.5f;
+            // Keep a little headroom so the edge tile stays on-screen.
+            if (maxX < minX) maxX = minX;
+            if (maxY < minY) maxY = minY;
         }
 
 
@@ -687,6 +1068,20 @@ namespace E2EApi.Features
                         int.TryParse(p[2], out state.OriginX);
                         int.TryParse(p[3], out state.OriginY);
                     }
+                    for (int i = 4; i < p.Length; i++)
+                    {
+                        if (p[i] == "extended=1" || p[i] == "1")
+                        {
+                            ExtendedFloors.Enable("loaded from bounds");
+                        }
+                    }
+                }
+                else if (raw.StartsWith("extended="))
+                {
+                    if (raw.Substring("extended=".Length) == "1")
+                    {
+                        ExtendedFloors.Enable("loaded from sidecar");
+                    }
                 }
                 else if (raw.StartsWith("layer="))
                 {
@@ -698,6 +1093,10 @@ namespace E2EApi.Features
                         if (!int.TryParse(p[0], out id)) id = state.Layers.Count;
                         type = ParseLayerType(p[1]);
                         if (!int.TryParse(p[2], out backing)) backing = NativeLayerForType(type);
+                        if (backing >= NativeLayerCount)
+                        {
+                            ExtendedFloors.Enable("loaded layer backing >= 6");
+                        }
                         state.Layers.Add(new VirtualLayer
                         {
                             Id = id,
@@ -739,19 +1138,34 @@ namespace E2EApi.Features
             {
                 return DefaultState();
             }
+            // Effective placeable range is sbyte-limited (-128..127) for cursor +
+            // instruction coords. Keep metadata honest to what the editor can reach.
+            const int CoordMin = -128;
+            const int CoordMax = 127;
+            int originX = Clamp(state.OriginX, CoordMin, CoordMax);
+            int originY = Clamp(state.OriginY, CoordMin, CoordMax);
+            int width = Clamp(state.Width, 1, CoordMax - CoordMin + 1);
+            int height = Clamp(state.Height, 1, CoordMax - CoordMin + 1);
+            if (originX + width - 1 > CoordMax) width = CoordMax - originX + 1;
+            if (originY + height - 1 > CoordMax) height = CoordMax - originY + 1;
+            if (width < 1) width = 1;
+            if (height < 1) height = 1;
             var clean = new GeometryState
             {
                 Version = FormatVersion,
-                Width = Clamp(state.Width, 1, 512),
-                Height = Clamp(state.Height, 1, 512),
-                OriginX = Clamp(state.OriginX, -512, 512),
-                OriginY = Clamp(state.OriginY, -512, 512),
+                Width = width,
+                Height = height,
+                OriginX = originX,
+                OriginY = originY,
             };
+            int maxBacking = ExtendedFloors.Enabled
+                ? ExtendedFloors.MaxFloors - 1
+                : NativeLayerCount - 1;
             foreach (var layer in state.Layers)
             {
                 if (layer == null) continue;
                 var copy = layer.Clone();
-                copy.BackingLayer = Clamp(copy.BackingLayer, 0, NativeLayerCount - 1);
+                copy.BackingLayer = Clamp(copy.BackingLayer, 0, maxBacking);
                 if (string.IsNullOrEmpty(copy.Name))
                 {
                     copy.Name = DefaultName(copy.Type, clean.Layers.Count);
@@ -833,6 +1247,7 @@ namespace E2EApi.Features
                     hash = hash * 31 + layer.Id;
                     hash = hash * 31 + (int)layer.Type;
                     hash = hash * 31 + layer.BackingLayer;
+                    hash = hash * 31 + (layer.Hidden ? 1 : 0);
                 }
                 return hash.ToString("x8");
             }

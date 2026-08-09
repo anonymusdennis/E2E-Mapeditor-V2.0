@@ -146,6 +146,9 @@ namespace E2EApi.Features
             {
                 if (editorLayer >= 0 && p.Layer > editorLayer)
                     continue;
+                if (MapGeometry.IsLayerHidden(p.Layer) &&
+                    p.Layer != MapGeometry.SelectedVirtualLayerIndex)
+                    continue;
 
                 // build sprite array (null elements = missing atlas frame)
                 var sprites = new Sprite[p.Frames.Count];

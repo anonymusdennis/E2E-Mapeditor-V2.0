@@ -1,5 +1,6 @@
 #!/bin/bash
 # Build E2EApi + MapEditorMod and deploy into the game's BepInEx/plugins.
+# Same DLLs work for native Linux and Proton/Windows (net35 / Unity Mono).
 set -e
 cd "$(dirname "$0")/.."
 

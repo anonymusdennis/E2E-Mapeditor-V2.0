@@ -1,0 +1,10 @@
+# Paste EXACTLY into Steam → The Escapists 2 → Properties → Launch Options
+# (required for Proton Experimental so Windows BepInEx / UnityDoorstop can load)
+
+WINEDLLOVERRIDES="winhttp=n,b" %command%
+
+# Backup form without quotes (if Steam UI strips the quoted form):
+# WINEDLLOVERRIDES=winhttp=n,b %command%
+
+# Fallback if Doorstop still does not load on some Proton Experimental builds:
+# WINEDLLOVERRIDES="winhttp=n,b;version=n,b" %command%

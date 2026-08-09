@@ -57,115 +57,74 @@ The mod ships as two DLLs:
 
 ## Installation
 
-The same package works on Windows and Linux (including Steam Deck) — the game
-is a native build on both. Full details with troubleshooting live in
-[docs/user-install.md](docs/user-install.md); the short version follows.
+Open your game folder (Steam → The Escapists 2 → Manage → Browse local files)
+and look at the executable:
 
-### 1. Install BepInEx 5
+| You see… | Use… |
+|----------|------|
+| `TheEscapists2.exe` | **BepInEx for Windows** (this is the usual Steam / Proton case) |
+| `TheEscapists2.x86_64` | BepInEx for Linux — see [docs/user-install.md](docs/user-install.md) |
 
-You need **BepInEx 5.4.21**. Newer 5.4.23.x builds crash in the preloader
-on this game (MonoMod `NativeDetour` NullReferenceException) — stick to 5.4.21.
+If the file is a **Windows** `.exe`, you must use **Windows BepInEx**.
+Do **not** install the Linux (`*nix`) BepInEx package next to it.
+More info: [BepInEx + Proton/Wine](https://docs.bepinex.dev/articles/advanced/steam_interop.html#protonwine)
 
-Download from the
-[BepInEx releases page](https://github.com/BepInEx/BepInEx/releases/tag/v5.4.21):
+### Quick install (Windows exe / Steam Proton)
 
-- Windows: `BepInEx_x86_5.4.21.0.zip` (the Windows game is 32-bit — **not** x64)
-- Linux / Steam Deck: `BepInEx_unix_5.4.21.0.zip`
+1. **Download BepInEx 5.4.21 for Windows (32-bit)**  
+   [`BepInEx_x86_5.4.21.0.zip`](https://github.com/BepInEx/BepInEx/releases/download/v5.4.21/BepInEx_x86_5.4.21.0.zip)  
+   (Use **x86**, not x64. Do not use a newer 5.4.23 build.)
 
-#### Windows
+2. **Extract that zip into the game folder** (same folder as `TheEscapists2.exe`).  
+   You should now see:
+   - `winhttp.dll`
+   - `doorstop_config.ini`
+   - `BepInEx/`
 
-1. Find the game folder: Steam → right-click The Escapists 2 → Manage →
-   Browse local files (usually
-   `C:\Program Files (x86)\Steam\steamapps\common\The Escapists 2`).
-2. Extract the BepInEx zip **into the game folder**, next to
-   `TheEscapists2.exe`. You should now have a `BepInEx` folder and
-   `winhttp.dll` there.
-3. Start the game once and quit. BepInEx generates its folder structure
-   (`BepInEx/plugins`, `BepInEx/config`, `BepInEx/LogOutput.log`).
-
-#### Linux / Steam Deck
-
-1. Find the game folder
-   (`~/.local/share/Steam/steamapps/common/The Escapists 2`; on Steam Deck use
-   Desktop Mode).
-2. Extract the BepInEx **unix** zip into the game folder, next to
-   `TheEscapists2.x86_64`. You should now have a `BepInEx` folder and
-   `run_bepinex.sh` there.
-3. Edit `run_bepinex.sh`:
-   - set the executable name near the top:
-
-     ```sh
-     executable_name="TheEscapists2.x86_64"
-     ```
-
-   - **required fix for this game:** the game's bundled mono directory must be
-     on `LD_LIBRARY_PATH`, or every Harmony patch dies with a `NativeDetour`
-     NullReferenceException. Find the line that exports `LD_LIBRARY_PATH` and
-     make it:
-
-     ```sh
-     export LD_LIBRARY_PATH="${doorstop_libs}":"${BASEDIR}/TheEscapists2_Data/Mono/x86_64":${LD_LIBRARY_PATH}
-     ```
-
-4. Make the script executable: `chmod +x run_bepinex.sh`
-5. In Steam: right-click The Escapists 2 → Properties → Launch Options:
-
+3. **Install this mod** — put the two DLLs here:
    ```
-   ./run_bepinex.sh %command%
+   BepInEx/plugins/E2EMapEditor/E2EApi.dll
+   BepInEx/plugins/E2EMapEditor/MapEditorMod.dll
+   ```
+   (Release zip from [Releases](../../releases), or `./tools/build.sh` when developing.)
+
+4. **Steam → Properties → Launch Options** (required for Proton Experimental so
+   Windows BepInEx / UnityDoorstop can load — not a custom launch script).
+   Paste this EXACTLY:
+
+   WINEDLLOVERRIDES="winhttp=n,b" %command%
+
+   On real Windows you can leave Launch Options empty.
+   See also `tools/STEAM_LAUNCH_OPTIONS.txt` for backup forms.
+
+
+5. **Launch the game from Steam** as usual. No extra scripts.
+
+6. **Check it worked** — open `BepInEx/LogOutput.log` in the game folder.
+   You want a line like:
+   ```
+   [Info   :E2E Map Editor] E2E Map Editor … loading
    ```
 
-6. Start the game once and quit so BepInEx generates its folders.
+### After it loads
 
-### 2. Install the mod
-
-Extract the release zip (`E2EMapEditor-vX.Y.Z.zip` from the
-[Releases](../../releases) page) **into the game folder**. It only contains
-
-```
-BepInEx/plugins/E2EMapEditor/
-├── E2EApi.dll
-└── MapEditorMod.dll
-```
-
-so it merges into the BepInEx install from step 1.
-
-To verify: start the game and check `BepInEx/LogOutput.log` in the game folder
-for a line like
-
-```
-[Info   :E2E Map Editor] E2E Map Editor 2.0.0 loading (E2EApi 0.1.0)
-```
-
-### 3. First run
-
-- The game starts **windowed at 1600×900** by default so the editor UI fits
-  next to it (configurable).
-- Open **<http://127.0.0.1:8723>** in your browser — when you first enter the
-  level editor the mod opens it automatically (configurable). It only listens
-  on localhost.
-- Press **F10** for the in-game mod window.
-
-Default hotkeys (all rebindable in the config):
+- Web UI: <http://127.0.0.1:8723>
+- In-game mod window: **F10**
 
 | Key | Where | What |
 |-----|-------|------|
 | F10 | anywhere | toggle the in-game mod window |
-| F6  | level editor | toggle an electric fence on the tile under the cursor |
-| F7  | level editor | trigger link: press on the button tile, then on the target tile |
-| E   | playing a map | activate the trigger button you are standing on |
+| F6  | level editor | toggle an electric fence under the cursor |
+| F7  | level editor | trigger link (button tile → target tile) |
+| E   | playing | activate the trigger you are standing on |
 
-### 4. Configuration
-
-BepInEx writes the config on first run to
+Config file (created on first run):
 
 ```
-<game folder>/BepInEx/config/org.anonymusdennis.e2e.mapeditor.cfg
+BepInEx/config/org.anonymusdennis.e2e.mapeditor.cfg
 ```
 
-Plain text; most settings can also be flipped live from the web UI's Settings
-tab. Highlights: `[Editor] UnlockDevBlocks`, `[Editor] IgnoreAllRestrictions`,
-`[Editor] GuardInmateCap`, `[Display] ForceWindowed` / `WindowedWidth` /
-`WindowedHeight`, `[WebUI] Port` / `AutoOpenBrowser`, `[Extras]` hotkeys.
+More detail / native Linux / troubleshooting: [docs/user-install.md](docs/user-install.md).
 
 ## Building from source
 

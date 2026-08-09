@@ -224,24 +224,25 @@ namespace MapEditorMod
                         : $"switch ({SwitchX},{SwitchY}) — click fence tiles to link, Esc resets";
                 case EditorToolMode.PaintTile:
                     return Composite != null
-                        ? $"LMB places structure \"{Composite.Name}\" {Composite.WTiles}x{Composite.HTiles} ({Composite.Parts.Count} parts){selHint}"
+                        ? $"LMB places structure \"{Composite.Name}\" {Composite.WTiles}x{Composite.HTiles} ({Composite.Parts.Count} parts); RMB erases{selHint}"
                         : Stamp == null
                         ? "pick a stamp in the Tilesets tab first"
-                        : $"LMB stamps {Stamp.WTiles}x{Stamp.HTiles} tile(s) ({(Stamp.Decor ? "over" : "under")} characters){selHint}";
+                        : $"LMB stamps {Stamp.WTiles}x{Stamp.HTiles} tile(s) ({(Stamp.Decor ? "over" : "under")} characters); RMB erases{selHint}";
                 case EditorToolMode.EraseTile:
                     return "click modded tiles to remove them";
                 case EditorToolMode.PaintAnimatedTile:
                     return AnimatedStamp == null
                         ? "pick an animated tile from the building blocks first"
-                        : $"LMB places animated tile \"{AnimatedStamp.Name}\" {AnimatedStamp.WTiles}x{AnimatedStamp.HTiles} ({AnimatedStamp.Frames.Count} frames @ {AnimatedStamp.Fps:0.#} FPS){selHint}";
+                        : $"LMB places animated tile \"{AnimatedStamp.Name}\" {AnimatedStamp.WTiles}x{AnimatedStamp.HTiles} ({AnimatedStamp.Frames.Count} frames @ {AnimatedStamp.Fps:0.#} FPS); RMB erases{selHint}";
                 case EditorToolMode.EraseAnimatedTile:
                     return "click animated tiles to remove them";
                 case EditorToolMode.PaintConnectedTile:
                     return ConnectedStamp == null
                         ? "pick a connected floor/wall first"
-                        : $"LMB paints connected \"{ConnectedStamp.Name}\" color {ConnectedStamp.Color}; Shift+LMB locks placed tiles";
+                        : $"LMB paints connected \"{ConnectedStamp.Name}\" color {ConnectedStamp.Color}; Shift+LMB locks; RMB erases";
                 default:
-                    return selHint.TrimStart();
+                    return "RMB delete; Alt+RMB also clears decor/custom tiles; Shift+RMB custom tiles only"
+                        + selHint;
             }
         }
 
@@ -359,7 +360,7 @@ namespace MapEditorMod
             if (Input.GetMouseButton(1))
             {
                 _lastStampX = _lastStampY = int.MinValue;
-                EraseCurrentTileBrush();
+                HandleModifierRightClickErase(EraseCurrentTileBrush);
                 return;
             }
             if ((Stamp == null && Composite == null) || !Input.GetMouseButton(0))
@@ -446,7 +447,7 @@ namespace MapEditorMod
             if (Input.GetMouseButton(1))
             {
                 _lastAnimStampX = _lastAnimStampY = int.MinValue;
-                EraseAnimatedBrushAtCursor();
+                HandleModifierRightClickErase(EraseAnimatedBrushAtCursor);
                 return;
             }
             if (AnimatedStamp == null || !Input.GetMouseButton(0))
@@ -497,7 +498,7 @@ namespace MapEditorMod
             if (Input.GetMouseButton(1))
             {
                 _lastStampX = _lastStampY = int.MinValue;
-                EraseConnectedBrushAtCursor();
+                HandleModifierRightClickErase(EraseConnectedBrushAtCursor);
                 return;
             }
             if (ConnectedStamp == null || !Input.GetMouseButton(0))
@@ -532,6 +533,34 @@ namespace MapEditorMod
             if (ConnectedStamp.Damaging)
             {
                 ElectricFences.SetElectrified(x, y, true);
+            }
+        }
+
+        /// <summary>
+        /// RMB erase with modifiers: Shift = custom tiles only; Alt = also wipe
+        /// every mod decor/custom tile (+ vanilla decoration) at the cursor.
+        /// </summary>
+        private static void HandleModifierRightClickErase(Action normalErase)
+        {
+            int x, y;
+            if (!Placement.GetCursorTile(out x, out y))
+            {
+                return;
+            }
+            int layer = CurrentEditorLayer();
+            if (ModifierDelete.ShiftHeld)
+            {
+                ModifierDelete.EraseCustomAt(x, y, layer);
+                return;
+            }
+            if (normalErase != null)
+            {
+                normalErase();
+            }
+            if (ModifierDelete.AltHeld)
+            {
+                ModifierDelete.EraseCustomAt(x, y, layer);
+                ModifierDelete.EraseVanillaDecorationAt(x, y);
             }
         }
 

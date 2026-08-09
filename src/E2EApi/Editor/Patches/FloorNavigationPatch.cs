@@ -24,6 +24,7 @@ namespace E2EApi.Editor.Patches
         private static bool UpAFloor_Prefix(FloorManager __instance,
             FloorManager.Floor currentFloor, ref FloorManager.Floor __result)
         {
+            if (currentFloor == null) return true;
             if (!FloorTypeRegistry.HasEntries) return true; // vanilla passthrough
 
             int nextIndex = FloorTypeRegistry.FindNextFloor(
@@ -48,6 +49,7 @@ namespace E2EApi.Editor.Patches
         private static bool DownAFloor_Prefix(FloorManager __instance,
             FloorManager.Floor currentFloor, ref FloorManager.Floor __result)
         {
+            if (currentFloor == null) return true;
             if (!FloorTypeRegistry.HasEntries) return true; // vanilla passthrough
 
             int nextIndex = FloorTypeRegistry.FindNextFloor(

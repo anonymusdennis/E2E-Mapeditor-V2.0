@@ -278,7 +278,8 @@ namespace MapEditorMod.WebUi
                box-shadow:0 16px 48px rgba(0,0,0,.55); }
   #layer_box h3 { margin:0; font-size:18px; color:#fff; }
   .layer-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
-  .layer-warn { font-size:12px; color:#ffb0a0; background:#2a1818; border:1px solid #6a3030;
+  .layer-warn { font-size:12px; color:#fff; background:#8b1e1e; border:1px solid #c04040;
+                font-weight:600; text-align:center;
                 border-radius:8px; padding:8px 12px; margin-bottom:10px; display:none; }
   .layer-warn.show { display:block; }
   .layer-bounds { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; align-items:center; }
@@ -460,7 +461,8 @@ namespace MapEditorMod.WebUi
       <div class='hint'>A tool takes over the left mouse button inside the game:
         the vanilla editor stops placing/selecting while it is active, and a colored
         tile cursor shows what you are aiming at. Paint/erase work by holding LMB and
-        dragging. Esc-equivalent: click the active tool button again to turn it off.</div>
+        dragging. RMB delete: Alt also clears decor/custom tiles; Shift deletes custom
+        tiles only. Esc-equivalent: click the active tool button again to turn it off.</div>
       <div class='row' style='margin-top:8px'>
         <button onclick='post(""/api/fence/cursor"")'>Toggle fence @ cursor (F6)</button>
         <button onclick='post(""/api/trigger/cursor"")'>Link trigger @ cursor (F7, 2 clicks)</button>
@@ -575,15 +577,11 @@ namespace MapEditorMod.WebUi
     <div class='card'>
       <h2>Display &amp; web UI</h2>
       <div class='row'>
-        <label class='chk'><input type='checkbox' id='s_forceWindowed'
-            onchange='setSetting(""forceWindowed"",this.checked,false)'>Force windowed (next launch)</label>
-        <span class='num'>Window <input type='number' id='n_windowWidth' min='0' max='7680'
-            onchange='setNum(""windowWidth"",this.value)'> ×
-            <input type='number' id='n_windowHeight' min='0' max='4320'
-            onchange='setNum(""windowHeight"",this.value)'></span>
+        <button onclick='toggleDisplay()'>Toggle fullscreen / windowed (F5)</button>
         <label class='chk'><input type='checkbox' id='s_autoOpen'
             onchange='setSetting(""autoOpen"",this.checked,false)'>Auto-open this page</label>
       </div>
+      <div class='hint'>Launches windowed. F5 toggles fullscreen ↔ windowed.</div>
     </div>
     <div class='card'>
       <h2>Virtual map layers</h2>
@@ -964,7 +962,7 @@ namespace MapEditorMod.WebUi
       <button onclick='closeLayerStack()'>Close</button>
     </div>
     <div class='hint' style='margin-bottom:10px'>Stack of logical floors stored in Level.e2e. Drag to reorder. Right-click a floor in-game to hide/show it. Drag floors to 🗑 Deleted to remove them.</div>
-    <div class='layer-warn show'>Currently this feature is sadly broken, use at your own risk.</div>
+    <div class='layer-warn show'>WIP — Floors beyond 6 are not available yet. Coming in a future update. Bounds resize and hide/show still work.</div>
     <div id='layer_warning' class='layer-warn'></div>
     <div class='layer-bounds'>
       <span class='lbl'>Bounds:</span>
@@ -1304,6 +1302,11 @@ function setSetting(name, value, reloadList) {
 
 function setNum(name, value) {
   fetch(`/api/numsetting?name=${name}&value=${value}`, {method:'POST'});
+}
+
+async function toggleDisplay() {
+  const r = await post('/api/display/toggle');
+  if (r && r.msg) msg(r.msg);
 }
 
 /* ---- per-map settings ---- */
@@ -1873,7 +1876,18 @@ async function geoApply(r) {
 }
 
 async function geoSelect(i) { await geoApply(await post('/api/geometry/select?index=' + i)); }
-async function geoAdd(type) { await geoApply(await post('/api/geometry/add?type=' + type)); }
+async function geoAdd(type) {
+  const r = await post('/api/geometry/add?type=' + type);
+  if (r && r.needsConfirm) {
+    msg('WIP — floors beyond 6 coming in a future update');
+    return;
+  }
+  if (r && r.ok === false) {
+    msg(r.msg || 'could not add layer (floors beyond 6 are WIP)');
+    return;
+  }
+  await geoApply(r);
+}
 async function geoRemove(i) {
   if (!confirm('Remove virtual layer #' + i + '?')) return;
   await geoApply(await post('/api/geometry/remove?index=' + i));
@@ -1919,11 +1933,10 @@ async function poll() {
     el('s_fenceOverlay').checked = s.settings.fenceOverlay;
     el('s_arrows').checked = s.settings.arrows;
     el('s_cameraLock').checked = s.settings.cameraLock;
-    el('s_forceWindowed').checked = s.settings.forceWindowed;
     el('s_autoOpen').checked = s.settings.autoOpen;
     el('s_vanillaFallback').checked = s.settings.vanillaFallback;
     el('s_infiniteEnergy').checked = s.settings.infiniteEnergy;
-    for (const k of ['guardCap','zoomSteps','fenceDamage','windowWidth','windowHeight']) {
+    for (const k of ['guardCap','zoomSteps','fenceDamage']) {
       const box = el('n_' + k);
       if (box && document.activeElement !== box) box.value = s.numbers[k];
     }

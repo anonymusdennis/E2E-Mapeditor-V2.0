@@ -82,7 +82,7 @@ namespace E2EApi.Editor
             }
             x = controller.m_Block_X_Position;
             y = controller.m_Block_Y_Position;
-            return x >= 0 && y >= 0;
+            return MapGeometry.IsWithinMapBounds(x, y);
         }
 
         /// <summary>Group subsequent edits into one undo step.</summary>

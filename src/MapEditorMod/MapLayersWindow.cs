@@ -46,10 +46,22 @@ namespace MapEditorMod
             _window = ModWindow.Create("Configure Map Layers", 520f, 780f);
             var list = UiFactory.VerticalList(_window.Content, 24f, 4f);
 
-            var disclaimer = UiFactory.Label(list,
-                "Currently this feature is sadly broken, use at your own risk.", 11);
-            disclaimer.color = new Color(1f, 0.55f, 0.45f, 1f);
-            UiFactory.FixHeight(disclaimer, 32f);
+            var wipBtn = UiFactory.Button(list,
+                "WIP — Floors beyond 6 coming in a future update",
+                () => { });
+            var wipImg = wipBtn.GetComponent<Image>();
+            if (wipImg != null)
+            {
+                wipImg.color = new Color(0.55f, 0.12f, 0.12f, 1f);
+            }
+            var wipText = wipBtn.GetComponentInChildren<Text>();
+            if (wipText != null)
+            {
+                wipText.color = Color.white;
+                wipText.fontSize = 11;
+            }
+            wipBtn.interactable = false;
+            UiFactory.FixHeight(wipBtn.GetComponent<RectTransform>(), 36f);
 
             _summary = UiFactory.Label(list, "", 12);
             _summary.color = new Color(1f, 0.92f, 0.72f, 1f);
@@ -286,10 +298,15 @@ namespace MapEditorMod
         private void AddAddRow(Transform list)
         {
             var row = Row(list, "AddRow");
-            AddSmall(row, "+ Underground", () => MapGeometry.AddLayer(MapGeometry.VirtualLayerType.Underground));
-            AddSmall(row, "+ Ground", () => MapGeometry.AddLayer(MapGeometry.VirtualLayerType.Ground));
-            AddSmall(row, "+ Vent", () => MapGeometry.AddLayer(MapGeometry.VirtualLayerType.Vent));
-            AddSmall(row, "+ Roof", () => MapGeometry.AddLayer(MapGeometry.VirtualLayerType.Roof));
+            AddSmall(row, "+ Underground", () => RequestAddLayer(MapGeometry.VirtualLayerType.Underground));
+            AddSmall(row, "+ Ground", () => RequestAddLayer(MapGeometry.VirtualLayerType.Ground));
+            AddSmall(row, "+ Vent", () => RequestAddLayer(MapGeometry.VirtualLayerType.Vent));
+            AddSmall(row, "+ Roof", () => RequestAddLayer(MapGeometry.VirtualLayerType.Roof));
+        }
+
+        private void RequestAddLayer(MapGeometry.VirtualLayerType type)
+        {
+            MapGeometry.TryAddLayer(type);
         }
 
         private void SetSelectedType(MapGeometry.VirtualLayerType type)
@@ -359,8 +376,9 @@ namespace MapEditorMod
                 int usage;
                 backingUsage.TryGetValue(layer.BackingLayer, out usage);
                 string sharedWarning = usage > 1 ? " [!SHARED]" : "";
+                string hidden = layer.Hidden ? " [H]" : "";
                 text += mark + i + ": " + layer.Name + " [" + layer.Type +
-                    "] native " + layer.BackingLayer + sharedWarning + "\n";
+                    "] native " + layer.BackingLayer + sharedWarning + hidden + "\n";
             }
             return text;
         }

@@ -1,3 +1,11 @@
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using E2EApi.Features;
+using HarmonyLib;
+using UnityEngine;
+
 namespace E2EApi.Editor
 {
     /// <summary>
@@ -6,6 +14,30 @@ namespace E2EApi.Editor
     /// </summary>
     public static class EditorSession
     {
+        private static readonly FieldInfo RegisteredFlowsField =
+            AccessTools.Field(typeof(GlobalStart), "m_RegisteredFlows");
+
+        /// <summary>
+        /// Path to the open custom level's Level.dat (or empty when unavailable).
+        /// </summary>
+        public static string CurrentLevelPath
+        {
+            get
+            {
+                var globalStart = GlobalStart.GetInstance();
+                string path = globalStart != null ? globalStart.m_strCustomLevelFile : null;
+                if (string.IsNullOrEmpty(path))
+                {
+                    return "";
+                }
+                if (Directory.Exists(path) && !File.Exists(path))
+                {
+                    return Path.Combine(path, "Level.dat");
+                }
+                return path;
+            }
+        }
+
         /// <summary>
         /// Start an editor session from the main menu. Empty path = new map.
         /// Returns false when the game isn't in a state to do it.
@@ -25,7 +57,7 @@ namespace E2EApi.Editor
         /// Play-test the map currently open in the editor. Goes through the
         /// editor controller's own preview flow (save + playlist setup), the
         /// same path as the vanilla play-test button. Returns false outside
-        /// an editor session.
+        /// the editor.
         /// </summary>
         public static bool PlayTest()
         {
@@ -38,20 +70,12 @@ namespace E2EApi.Editor
             {
                 return false;
             }
-            // If the prison-checker dialog is on screen, go through its own
-            // preview handler: it hides the dialog (restoring input/timescale)
-            // before starting the preview. A modal dialog left open stalls
-            // the loading-screen fade forever.
-            var dialog = UnityEngine.Object.FindObjectOfType<LevelEditor_PrisonCheckerDialog>();
-            if (dialog != null && dialog.gameObject.activeInHierarchy)
-            {
-                dialog.OnPreviewButtonClicked();
-                return true;
-            }
             // PreviewLevel saves the level, then builds the PrisonData and
             // PlaylistData that the loader needs before flipping GlobalStart
             // into the preview flow. Calling GlobalStart.PreviewEditorLevel
             // directly skips that setup and hangs the loading screen.
+            // (LevelEditor_UIController has no OnPreviewButtonClicked — the
+            // vanilla play-test button wires PreviewLevel on the controller.)
             controller.PreviewLevel();
             return true;
         }
@@ -94,8 +118,121 @@ namespace E2EApi.Editor
             {
                 return false;
             }
+            ExtendedFloors.DiscardAliasState();
             globalStart.EndEditorLevel();
             return true;
+        }
+
+        /// <summary>
+        /// Exit the editor, wait until the frontend is ready, re-enter the
+        /// same level, then force-dismiss any stuck loading overlay.
+        /// </summary>
+        public static void ReloadAfterDelay(string path, float delaySeconds = 0.5f)
+        {
+            ApiRunner.StartRoutine(ReloadRoutine(path ?? "", delaySeconds));
+        }
+
+        /// <summary>
+        /// Hard-reset the vanilla <see cref="LoadingFlow"/> UI and refcount.
+        /// Needed when Exit+Enter races leave the loading canvas up while the
+        /// editor is already interactive underneath.
+        /// </summary>
+        public static void ForceDismissLoadingScreen()
+        {
+            try
+            {
+                ModTiles.CancelPreload();
+                var gs = GlobalStart.GetInstance();
+                if (gs == null || RegisteredFlowsField == null)
+                {
+                    return;
+                }
+                var flows = RegisteredFlowsField.GetValue(gs)
+                    as Dictionary<BaseFlowBehaviour.FlowType, BaseFlowBehaviour>;
+                if (flows == null)
+                {
+                    return;
+                }
+                BaseFlowBehaviour flow;
+                if (!flows.TryGetValue(BaseFlowBehaviour.FlowType.Loading, out flow) ||
+                    flow == null)
+                {
+                    return;
+                }
+                var loading = flow as LoadingFlow;
+                if (loading != null)
+                {
+                    loading.Reset();
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Log.Debug("ForceDismissLoadingScreen: " + ex.Message);
+            }
+        }
+
+        private static IEnumerator ReloadRoutine(string path, float delaySeconds)
+        {
+            // Caller already called Exit(). Wait for the editor scene to tear down
+            // and GlobalStart to return to the frontend — do NOT Enter while still
+            // in EXIT_* (that stacks LoadingFlow refcounts and sticks the overlay).
+            float timeout = 45f;
+            float elapsed = 0f;
+            while (Events.GameEvents.IsInEditor && elapsed < timeout)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            elapsed = 0f;
+            while (elapsed < timeout)
+            {
+                var gs = GlobalStart.GetInstance();
+                if (gs != null)
+                {
+                    var mode = gs.GetMode();
+                    if (mode == GlobalStart.GLOBALSTART_MODE.SHOW_FRONTEND ||
+                        mode == GlobalStart.GLOBALSTART_MODE.CHECK_INVITES ||
+                        mode == GlobalStart.GLOBALSTART_MODE.LOADING_FLOW_DUMMY_STATE)
+                    {
+                        break;
+                    }
+                }
+                elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            ForceDismissLoadingScreen();
+            if (delaySeconds > 0f)
+            {
+                yield return new WaitForSeconds(delaySeconds);
+            }
+            else
+            {
+                yield return null;
+            }
+
+            Enter(path);
+
+            elapsed = 0f;
+            while (!Events.GameEvents.IsEditorActive && elapsed < timeout)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            // Enter's KILL_LOADING may have been skipped or under-counted — wipe
+            // the overlay for several frames once the editor is live.
+            for (int i = 0; i < 60; i++)
+            {
+                if (Events.GameEvents.IsEditorActive)
+                {
+                    ForceDismissLoadingScreen();
+                }
+                yield return null;
+            }
+            ForceDismissLoadingScreen();
+            Log.Info("EditorSession reload complete — loading overlay dismissed");
         }
 
         /// <summary>
@@ -105,7 +242,7 @@ namespace E2EApi.Editor
         /// </summary>
         public static string SkipTitle()
         {
-            var boot = UnityEngine.Object.FindObjectOfType<BootFlow>();
+            var boot = Object.FindObjectOfType<BootFlow>();
             if (boot == null)
             {
                 return "no BootFlow (already past boot?)";

@@ -22,6 +22,7 @@ namespace E2EApi.Editor
         private const float ScrollViewHeight = 680f;
 
         private static bool _built;
+        private static bool _refreshQueued;
         private static GameObject _scrollRoot;
         private static ScrollRect _scroll;
         private static RectTransform _content;
@@ -39,6 +40,7 @@ namespace E2EApi.Editor
 
         public static void Reset()
         {
+            _refreshQueued = false;
             _buttons.Clear();
             if (_scrollRoot != null)
             {
@@ -61,8 +63,27 @@ namespace E2EApi.Editor
             _vanillaTabGroup = null;
         }
 
+        /// <summary>
+        /// Queue a rebuild for the next frame. Destroying UI rows inside the same
+        /// click that fired MapGeometry.Changed (e.g. Add Layer) crashes Unity.
+        /// </summary>
         public static void Refresh()
         {
+            if (!GameEvents.IsEditorActive)
+            {
+                return;
+            }
+            if (_refreshQueued)
+            {
+                return;
+            }
+            _refreshQueued = true;
+            E2EApi.MainThread.Post(RefreshNow);
+        }
+
+        private static void RefreshNow()
+        {
+            _refreshQueued = false;
             if (!GameEvents.IsEditorActive)
             {
                 return;
@@ -78,6 +99,7 @@ namespace E2EApi.Editor
             }
             RebuildButtons();
             ScrollToSelected(MapGeometry.SelectedVirtualLayerIndex);
+            MapGeometry.ApplyLayerVisibility();
         }
 
         public static void SelectLayer(int index)
@@ -87,7 +109,7 @@ namespace E2EApi.Editor
             if (ui != null)
             {
                 ui.ExternalChangeLayer(
-                    (BaseLevelManager.LevelLayers)MapGeometry.GetBackingLayer(index));
+                    MapGeometry.ToNativeUiLayer(MapGeometry.GetBackingLayer(index)));
                 ui.UpdateLayerChanges();
             }
             Refresh();
@@ -178,12 +200,13 @@ namespace E2EApi.Editor
 
         private static void RebuildButtons()
         {
-            // DestroyImmediate avoids stale child references within the same frame.
+            // Deferred Refresh means Destroy (not DestroyImmediate) is safe and
+            // avoids editor crashes when adding/removing layers from a button click.
             foreach (var btn in _buttons)
             {
                 if (btn != null)
                 {
-                    Object.DestroyImmediate(btn.gameObject);
+                    Object.Destroy(btn.gameObject);
                 }
             }
             _buttons.Clear();

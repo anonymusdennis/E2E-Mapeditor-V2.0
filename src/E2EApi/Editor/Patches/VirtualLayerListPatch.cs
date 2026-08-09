@@ -8,6 +8,8 @@ namespace E2EApi.Editor.Patches
     {
         private static void Postfix()
         {
+            // Vanilla just re-enabled m_MasterLayers via cutaway — re-apply hide.
+            MapGeometry.ApplyLayerVisibility();
             VirtualLayerListUi.Refresh();
         }
     }
@@ -37,8 +39,8 @@ namespace E2EApi.Editor.Patches
             if (ui != null)
             {
                 ui.ExternalChangeLayer(
-                    (BaseLevelManager.LevelLayers)MapGeometry.GetBackingLayer(
-                        MapGeometry.SelectedVirtualLayerIndex));
+                    MapGeometry.ToNativeUiLayer(MapGeometry.GetBackingLayer(
+                        MapGeometry.SelectedVirtualLayerIndex)));
                 ui.UpdateLayerChanges();
             }
             return false;
@@ -56,8 +58,8 @@ namespace E2EApi.Editor.Patches
             if (ui != null)
             {
                 ui.ExternalChangeLayer(
-                    (BaseLevelManager.LevelLayers)MapGeometry.GetBackingLayer(
-                        MapGeometry.SelectedVirtualLayerIndex));
+                    MapGeometry.ToNativeUiLayer(MapGeometry.GetBackingLayer(
+                        MapGeometry.SelectedVirtualLayerIndex)));
                 ui.UpdateLayerChanges();
             }
             return false;

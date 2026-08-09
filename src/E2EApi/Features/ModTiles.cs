@@ -279,6 +279,13 @@ namespace E2EApi.Features
         /// so the loading overlay can show progress and the first render
         /// doesn't hitch.
         /// </summary>
+        /// <summary>Abort atlas preload so the mod loading overlay cannot stick.</summary>
+        public static void CancelPreload()
+        {
+            Preloading = false;
+            PreloadCurrent = 0;
+        }
+
         private static System.Collections.IEnumerator PreloadAtlases()
         {
             var names = new List<string>();
@@ -291,18 +298,25 @@ namespace E2EApi.Features
             }
             if (names.Count == 0)
             {
+                Preloading = false;
                 yield break;
             }
             Preloading = true;
             PreloadCurrent = 0;
             PreloadTotal = names.Count;
-            foreach (var name in names)
+            try
             {
-                TileSets.GetAtlasTexture(name);
-                PreloadCurrent++;
-                yield return null;
+                foreach (var name in names)
+                {
+                    TileSets.GetAtlasTexture(name);
+                    PreloadCurrent++;
+                    yield return null;
+                }
             }
-            Preloading = false;
+            finally
+            {
+                Preloading = false;
+            }
         }
     }
 }

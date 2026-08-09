@@ -83,6 +83,12 @@ namespace E2EApi.Features
                 {
                     continue; // editor: hide layers above the current one
                 }
+                // Honour virtual-layer hide (selected layer still renders for editing).
+                if (MapGeometry.IsLayerHidden(p.Layer) &&
+                    p.Layer != MapGeometry.SelectedVirtualLayerIndex)
+                {
+                    continue;
+                }
                 var sprite = TileSets.GetSprite(p.Atlas, p.Rx, p.Ry, p.Rw, p.Rh);
                 bool missing = sprite == null;
                 if (missing)

@@ -9,6 +9,7 @@ using E2EApi;
 using E2EApi.Editor;
 using E2EApi.Features;
 using E2EApi.Persistence;
+using E2EApi.UI;
 
 namespace MapEditorMod.WebUi
 {
@@ -474,6 +475,17 @@ namespace MapEditorMod.WebUi
                     body = Encoding.UTF8.GetBytes("{\"ok\":true}");
                     return 200;
                 }
+                if (method == "POST" && path == "/api/display/toggle")
+                {
+                    string mode = MainThread.Run(() =>
+                    {
+                        DisplayToggle.Toggle();
+                        return DisplayToggle.IsFullscreen ? "fullscreen" : "windowed";
+                    });
+                    body = Encoding.UTF8.GetBytes(Ok(mode));
+                    return 200;
+                }
+
                 if (method == "POST" && path == "/api/setting")
                 {
                     string name = Get(query, "name");
@@ -949,7 +961,7 @@ namespace MapEditorMod.WebUi
             sb.Append(",\"fenceOverlay\":").Append(FenceOverlay.Enabled ? "true" : "false");
             sb.Append(",\"arrows\":").Append(TriggerArrows.Enabled ? "true" : "false");
             sb.Append(",\"cameraLock\":").Append(EditorCamera.LockPan ? "true" : "false");
-            sb.Append(",\"forceWindowed\":").Append(Plugin.CfgForceWindowed.Value ? "true" : "false");
+            sb.Append(",\"isWindowed\":").Append(DisplayToggle.IsFullscreen ? "false" : "true");
             sb.Append(",\"autoOpen\":").Append(Plugin.CfgWebUiAutoOpen.Value ? "true" : "false");
             sb.Append(",\"vanillaFallback\":").Append(Plugin.CfgVanillaFallback.Value ? "true" : "false");
             sb.Append(",\"infiniteEnergy\":").Append(E2EApi.Players.Player.InfiniteEnergy ? "true" : "false");
@@ -958,8 +970,6 @@ namespace MapEditorMod.WebUi
             sb.Append(",\"zoomSteps\":").Append(Plugin.CfgExtraZoomSteps.Value);
             sb.Append(",\"fenceDamage\":").Append(ElectricFences.DamagePerTick.ToString("0.#",
                 System.Globalization.CultureInfo.InvariantCulture));
-            sb.Append(",\"windowWidth\":").Append(Plugin.CfgWindowedWidth.Value);
-            sb.Append(",\"windowHeight\":").Append(Plugin.CfgWindowedHeight.Value);
             sb.Append("}}");
             return sb.ToString();
         }
@@ -1539,7 +1549,6 @@ namespace MapEditorMod.WebUi
                     Plugin.CfgLockCameraPan.Value = value;
                     EditorCamera.LockPan = value;
                     break;
-                case "forceWindowed": Plugin.CfgForceWindowed.Value = value; break;
                 case "autoOpen": Plugin.CfgWebUiAutoOpen.Value = value; break;
                 case "vanillaFallback":
                     Plugin.CfgVanillaFallback.Value = value;
@@ -1556,8 +1565,6 @@ namespace MapEditorMod.WebUi
                 case "guardCap": Plugin.CfgGuardInmateCap.Value = (int)value; break;
                 case "zoomSteps": Plugin.CfgExtraZoomSteps.Value = (int)value; break;
                 case "fenceDamage": ElectricFences.DamagePerTick = value; break;
-                case "windowWidth": Plugin.CfgWindowedWidth.Value = (int)value; break;
-                case "windowHeight": Plugin.CfgWindowedHeight.Value = (int)value; break;
             }
         }
 
@@ -1683,8 +1690,22 @@ namespace MapEditorMod.WebUi
                         MapGeometry.SelectLayer(GetInt(query, "index", 0));
                         break;
                     case "add":
-                        MapGeometry.AddLayer(ParseGeometryLayerType(Get(query, "type")));
+                    {
+                        var addType = ParseGeometryLayerType(Get(query, "type"));
+                        var addResult = MapGeometry.TryAddLayer(addType);
+                        if (addResult == MapGeometry.AddLayerResult.NeedsModConfirmation ||
+                            addResult == MapGeometry.AddLayerResult.Failed)
+                        {
+                            return "{\"ok\":false,\"msg\":" +
+                                Quote("WIP — floors beyond 6 coming in a future update") + "}";
+                        }
                         break;
+                    }
+                    case "confirm-extended":
+                    {
+                        return "{\"ok\":false,\"msg\":" +
+                            Quote("WIP — floors beyond 6 coming in a future update") + "}";
+                    }
                     case "remove":
                         MapGeometry.RemoveLayer(GetInt(query, "index", MapGeometry.SelectedVirtualLayerIndex));
                         break;

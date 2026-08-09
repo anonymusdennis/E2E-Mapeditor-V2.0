@@ -6,7 +6,7 @@ namespace E2EApi
     /// Hidden persistent MonoBehaviour that gives the API a per-frame tick
     /// (limitation enforcement, future event polling).
     /// </summary>
-    internal class ApiRunner : MonoBehaviour
+    public class ApiRunner : MonoBehaviour
     {
         private static ApiRunner _instance;
 

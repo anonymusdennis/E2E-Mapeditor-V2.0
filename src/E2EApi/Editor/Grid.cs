@@ -66,7 +66,12 @@ namespace E2EApi.Editor
             {
                 return null;
             }
-            var tiles = manager.m_BuildingLayers[nativeLayer].m_Tiles_TileSystem;
+            var layerData = manager.m_BuildingLayers[nativeLayer];
+            if (layerData == null)
+            {
+                return null;
+            }
+            var tiles = layerData.m_Tiles_TileSystem;
             if (tiles == null)
             {
                 return null;

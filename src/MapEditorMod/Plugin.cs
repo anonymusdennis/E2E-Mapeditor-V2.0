@@ -20,10 +20,8 @@ namespace MapEditorMod
         internal static ConfigEntry<bool> CfgIgnoreLayerRestrictions;
         internal static ConfigEntry<bool> CfgIgnoreCompletionState;
         internal static ConfigEntry<int> CfgGuardInmateCap;
-        internal static ConfigEntry<bool> CfgForceWindowed;
-        internal static ConfigEntry<int> CfgWindowedWidth;
-        internal static ConfigEntry<int> CfgWindowedHeight;
         internal static ConfigEntry<KeyCode> CfgWindowKey;
+        internal static ConfigEntry<KeyCode> CfgDisplayToggleKey;
         internal static ConfigEntry<KeyCode> CfgFenceKey;
         internal static ConfigEntry<KeyCode> CfgTriggerKey;
         internal static ConfigEntry<KeyCode> CfgActivateKey;
@@ -65,6 +63,7 @@ namespace MapEditorMod
             E2EApi.Features.Triggers.Initialise();
             E2EApi.Features.ModTiles.Initialise();
             E2EApi.Features.AnimatedModTiles.Initialise();
+            E2EApi.Features.ModifierDelete.Initialise();
             E2EApi.Features.MapGeometry.Initialise();
             E2EApi.Features.CustomAssetPlacements.Initialise();
             E2EApi.Features.MapSettings.Initialise();
@@ -144,10 +143,8 @@ namespace MapEditorMod
 
         private void Start()
         {
-            if (CfgForceWindowed.Value)
-            {
-                WindowMode.ForceWindowed(CfgWindowedWidth.Value, CfgWindowedHeight.Value);
-            }
+            // Default windowed launch — same as a normal desktop app.
+            DisplayToggle.GoWindowed();
         }
 
         private void Update()
@@ -156,6 +153,10 @@ namespace MapEditorMod
             if (LoadingOverlay.Visible)
             {
                 return; // mod asset work in progress — eat all mod input
+            }
+            if (Input.GetKeyDown(CfgDisplayToggleKey.Value))
+            {
+                DisplayToggle.Toggle();
             }
             if (Input.GetKeyDown(CfgWindowKey.Value))
             {
@@ -198,10 +199,14 @@ namespace MapEditorMod
         {
             Log.LogInfo("level editor entered");
             _inEditor = true;
+            // Exit→Enter reload can leave LoadingFlow refcount > 0 — wipe it.
+            EditorSession.ForceDismissLoadingScreen();
+            LoadingOverlay.Hide();
             _quickPanel.Show();
             E2EApi.Editor.EditorCamera.ExtendZoom(CfgExtraZoomSteps.Value);
             E2EApi.Editor.EditorCamera.ApplyLock();
             GeometryCompatDialog.MaybeShow();
+            MapGeometry.ApplyLayerVisibility();
             VirtualLayerListUi.Refresh();
             if (CfgWebUiAutoOpen.Value && !_browserOpened)
             {
@@ -302,15 +307,9 @@ namespace MapEditorMod
             CfgGuardInmateCap = Config.Bind(
                 "Editor", "GuardInmateCap", 24,
                 "Force the available guard/inmate count in the editor to this value (0 = vanilla behaviour). (V0 feature)");
-            CfgForceWindowed = Config.Bind(
-                "Display", "ForceWindowed", true,
-                "Switch the game to windowed mode on startup.");
-            CfgWindowedWidth = Config.Bind(
-                "Display", "WindowedWidth", 0,
-                "Window width when ForceWindowed is on (0 = keep current).");
-            CfgWindowedHeight = Config.Bind(
-                "Display", "WindowedHeight", 0,
-                "Window height when ForceWindowed is on (0 = keep current).");
+            CfgDisplayToggleKey = Config.Bind(
+                "Display", "FullscreenToggleKey", KeyCode.F5,
+                "Hotkey that toggles fullscreen ↔ windowed.");
             CfgWindowKey = Config.Bind(
                 "UI", "WindowToggleKey", KeyCode.F10,
                 "Hotkey that shows/hides the mod window.");
